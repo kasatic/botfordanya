@@ -5,3 +5,6 @@ __pycache__/
 .idea/
 .vscode/
 *.pyc
+*.db
+token.txt
+admin.txt
