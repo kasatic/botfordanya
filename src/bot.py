@@ -4,6 +4,7 @@
 import logging
 import signal
 import asyncio
+from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
 from src.config import config
@@ -138,12 +139,39 @@ class Bot:
         
         await self.application.initialize()
         await self.application.start()
+        
+        # Регистрируем команды в меню Telegram
+        await self._set_commands()
+        
         await self.application.updater.start_polling()
         
         # Запускаем shame service
         await self.shame_service.start()
         
         await self._shutdown_event.wait()
+    
+    async def _set_commands(self) -> None:
+        """Регистрирует команды в меню Telegram."""
+        commands = [
+            BotCommand("menu", "🏠 Главное меню"),
+            BotCommand("stats", "📊 Моя статистика"),
+            BotCommand("top", "🏆 Топ нарушителей"),
+            # Dota 2
+            BotCommand("link", "🔗 Привязать Steam"),
+            BotCommand("game", "🎮 Проверить в игре ли"),
+            BotCommand("last", "📈 Статистика последнего матча"),
+            BotCommand("lastgame", "📊 Краткая инфа о матче"),
+            BotCommand("profile", "👤 Мой профиль Dota"),
+            BotCommand("toxic", "☢️ Анализ токсичности"),
+            BotCommand("shame", "😈 Подписка на позор"),
+            # Модерация
+            BotCommand("trust", "🤍 Добавить в белый список"),
+            BotCommand("untrust", "⛔ Убрать из белого списка"),
+            BotCommand("help", "❓ Помощь"),
+        ]
+        
+        await self.application.bot.set_my_commands(commands)
+        logger.info("📋 Bot commands registered")
     
     async def shutdown(self) -> None:
         """Graceful shutdown."""
