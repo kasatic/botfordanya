@@ -11,8 +11,12 @@ from src.database import (
     Database, SpamRepository, ViolationRepository, 
     WhitelistRepository, ChatSettingsRepository, BanStatsRepository
 )
+from src.database.steam_repository import SteamLinkRepository
 from src.services import SpamDetector, BanService, AdminService, DotaService
+from src.services.opendota_service import OpenDotaService
+from src.services.shame_service import ShameService
 from src.handlers import register_spam_handlers, MenuHandlers, ModerationHandlers
+from src.handlers.dota import DotaHandlers
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -27,6 +31,8 @@ class Bot:
     def __init__(self):
         self.application: Application = None
         self.db: Database = None
+        self.opendota: OpenDotaService = None
+        self.shame_service: ShameService = None
         self._shutdown_event = asyncio.Event()
     
     async def setup(self) -> None:
@@ -41,12 +47,15 @@ class Bot:
         whitelist_repo = WhitelistRepository(self.db)
         settings_repo = ChatSettingsRepository(self.db)
         stats_repo = BanStatsRepository(self.db)
+        steam_repo = SteamLinkRepository(self.db)
+        await steam_repo.init_table()
         
         # Сервисы
         spam_detector = SpamDetector(spam_repo, whitelist_repo, settings_repo)
         ban_service = BanService(violation_repo, spam_repo, stats_repo)
         admin_service = AdminService(config.files.admins)
         dota_service = DotaService(config.files.dota_users)
+        self.opendota = OpenDotaService()
         
         # Приложение
         self.application = Application.builder().token(config.token).build()
@@ -62,6 +71,9 @@ class Bot:
             ban_service, admin_service, whitelist_repo, violation_repo
         )
         
+        # Обработчики Dota
+        dota_handlers = DotaHandlers(self.opendota, steam_repo)
+        
         # Команды
         self.application.add_handler(CommandHandler("start", menu.start_command))
         self.application.add_handler(CommandHandler("menu", menu.menu_command))
@@ -70,6 +82,19 @@ class Bot:
         self.application.add_handler(CommandHandler("top", moderation.top_command))
         self.application.add_handler(CommandHandler("trust", moderation.trust_command))
         self.application.add_handler(CommandHandler("untrust", moderation.untrust_command))
+        
+        # Dota команды
+        self.application.add_handler(CommandHandler("link", dota_handlers.link_command))
+        self.application.add_handler(CommandHandler("unlink", dota_handlers.unlink_command))
+        self.application.add_handler(CommandHandler("game", dota_handlers.game_command))
+        self.application.add_handler(CommandHandler("lastgame", dota_handlers.lastgame_command))
+        self.application.add_handler(CommandHandler("last", dota_handlers.last_command))
+        self.application.add_handler(CommandHandler("profile", dota_handlers.profile_command))
+        self.application.add_handler(CommandHandler("toxic", dota_handlers.toxic_command))
+        self.application.add_handler(CommandHandler("shame", dota_handlers.shame_command))
+        
+        # Shame service
+        self.shame_service = ShameService(self.opendota, steam_repo, self.application)
         
         # Callback handlers (порядок важен!)
         self.application.add_handler(CallbackQueryHandler(
@@ -115,11 +140,20 @@ class Bot:
         await self.application.start()
         await self.application.updater.start_polling()
         
+        # Запускаем shame service
+        await self.shame_service.start()
+        
         await self._shutdown_event.wait()
     
     async def shutdown(self) -> None:
         """Graceful shutdown."""
         logger.info("🛑 Shutting down...")
+        
+        if self.shame_service:
+            await self.shame_service.stop()
+        
+        if self.opendota:
+            await self.opendota.close()
         
         if self.application:
             await self.application.updater.stop()

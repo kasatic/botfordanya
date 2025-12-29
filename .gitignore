@@ -40,3 +40,7 @@ logs/
 *.pem
 id_rsa*
 *.key
+
+
+# Kiro MCP settings (contains secrets)
+.kiro/settings/mcp.json

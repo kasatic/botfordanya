@@ -18,20 +18,15 @@ jobs:
           script: |
             set -e
             
-            echo "� Iunstalling dependencies..."
-            apt-get update -qq
-            apt-get install -y -qq git docker.io docker-compose
-            systemctl start docker
-            systemctl enable docker
-            
-            echo "� RSetting up project..."
+            echo "📁 Setting up project..."
             if [ ! -d "/opt/antispam-bot" ]; then
-              git clone https://github.com/kasatic/botfordanya.git /opt/antispam-bot
+              git clone https://${{ secrets.GH_TOKEN }}@github.com/kasatic/botfordanya.git /opt/antispam-bot
             fi
             
             cd /opt/antispam-bot
             
             echo "📥 Pulling latest code..."
+            git remote set-url origin https://${{ secrets.GH_TOKEN }}@github.com/kasatic/botfordanya.git
             git fetch origin
             git reset --hard origin/main || git reset --hard origin/master
             
@@ -39,11 +34,11 @@ jobs:
             echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
             
             echo "🐳 Building and starting..."
-            docker-compose down || true
-            docker-compose up -d --build
+            docker compose down || true
+            docker compose up -d --build
             
             echo "🧹 Cleanup..."
             docker image prune -f
             
             echo "✅ Done!"
-            docker-compose ps
+            docker compose ps

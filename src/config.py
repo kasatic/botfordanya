@@ -13,9 +13,6 @@ load_dotenv()
 @dataclass(frozen=True, slots=True)
 class SpamLimits:
     """Лимиты для разных типов контента."""
-    __slots__ = ('sticker_limit', 'sticker_window', 'text_limit', 'text_window',
-                 'image_limit', 'image_window', 'video_limit', 'video_window')
-    
     sticker_limit: int = 3
     sticker_window: int = 30
     
