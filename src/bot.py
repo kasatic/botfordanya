@@ -64,7 +64,8 @@ class Bot:
         # Обработчики меню
         menu = MenuHandlers(
             ban_service, admin_service, whitelist_repo,
-            violation_repo, settings_repo, stats_repo
+            violation_repo, settings_repo, stats_repo,
+            steam_repo=steam_repo, opendota=self.opendota
         )
         
         # Обработчики модерации
@@ -101,6 +102,10 @@ class Bot:
         self.application.add_handler(CallbackQueryHandler(
             menu.handle_menu_callback, 
             pattern="^menu_|^chatstats_|^noop$"
+        ))
+        self.application.add_handler(CallbackQueryHandler(
+            menu.handle_dota_callback,
+            pattern="^dota_"
         ))
         self.application.add_handler(CallbackQueryHandler(
             menu.handle_settings_callback, 

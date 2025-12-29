@@ -9,10 +9,12 @@ from telegram.error import BadRequest
 from src.ui import Keyboards, Messages
 from src.ui.messages import UserInfo
 from src.services import BanService, AdminService
+from src.services.opendota_service import OpenDotaService
 from src.database import (
     WhitelistRepository, ViolationRepository, 
     ChatSettingsRepository, BanStatsRepository
 )
+from src.database.steam_repository import SteamLinkRepository
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,9 @@ class MenuHandlers:
         whitelist_repo: WhitelistRepository,
         violation_repo: ViolationRepository,
         settings_repo: ChatSettingsRepository,
-        stats_repo: BanStatsRepository
+        stats_repo: BanStatsRepository,
+        steam_repo: SteamLinkRepository = None,
+        opendota: OpenDotaService = None
     ):
         self.ban_service = ban_service
         self.admin_service = admin_service
@@ -35,6 +39,8 @@ class MenuHandlers:
         self.violation_repo = violation_repo
         self.settings_repo = settings_repo
         self.stats_repo = stats_repo
+        self.steam_repo = steam_repo
+        self.opendota = opendota
     
     # ═══════════════════════════════════════════════════════════
     # 🏠 ГЛАВНОЕ МЕНЮ
@@ -91,6 +97,9 @@ class MenuHandlers:
             
             elif data == "menu_whitelist":
                 await self._show_whitelist(query, context, chat_id)
+            
+            elif data == "menu_dota":
+                await self._show_dota_menu(query, context, user_id)
             
             elif data == "menu_help":
                 await query.edit_message_text(
@@ -341,3 +350,275 @@ class MenuHandlers:
                 parse_mode="Markdown",
                 reply_markup=Keyboards.back_to_menu()
             )
+    
+    # ═══════════════════════════════════════════════════════════
+    # 🎮 DOTA 2
+    # ═══════════════════════════════════════════════════════════
+    
+    async def _show_dota_menu(self, query, context, user_id: int) -> None:
+        """Показывает меню Dota 2."""
+        is_linked = False
+        is_shame_subscribed = False
+        
+        if self.steam_repo:
+            account_id = await self.steam_repo.get_account_id(user_id)
+            is_linked = account_id is not None
+            
+            if is_linked:
+                chat_id = query.message.chat_id
+                is_shame_subscribed = await self.steam_repo.is_shame_subscribed(user_id, chat_id)
+        
+        text = "🎮 *Dota 2*\n\n"
+        if is_linked:
+            text += "✅ Steam привязан\n\nВыбери действие:"
+        else:
+            text += "❌ Steam не привязан\n\nПривяжи аккаунт чтобы использовать функции:"
+        
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=Keyboards.dota_menu(is_linked, is_shame_subscribed)
+        )
+    
+    async def handle_dota_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработка Dota меню."""
+        query = update.callback_query
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        data = query.data
+        
+        await query.answer()
+        
+        try:
+            if data == "dota_link_info":
+                await query.edit_message_text(
+                    "🔗 *Как привязать Steam:*\n\n"
+                    "Напиши мне в ЛС команду:\n"
+                    "`/link <ссылка или ID>`\n\n"
+                    f"{OpenDotaService.get_supported_formats()}\n"
+                    "📌 *Примеры:*\n"
+                    "• `/link 123456789`\n"
+                    "• `/link https://dotabuff.com/players/123456789`\n"
+                    "• `/link https://steamcommunity.com/id/nickname`",
+                    parse_mode="Markdown",
+                    reply_markup=Keyboards.back_to_menu()
+                )
+                return
+            
+            # Для остальных команд нужна привязка
+            if not self.steam_repo or not self.opendota:
+                await query.edit_message_text(
+                    "❌ Сервис временно недоступен",
+                    reply_markup=Keyboards.back_to_menu()
+                )
+                return
+            
+            account_id = await self.steam_repo.get_account_id(user_id)
+            
+            if not account_id:
+                await query.edit_message_text(
+                    "❌ Сначала привяжи Steam!\n"
+                    "Напиши мне в ЛС: /link",
+                    reply_markup=Keyboards.back_to_menu()
+                )
+                return
+            
+            if data == "dota_game":
+                await self._dota_check_game(query, context, user_id, account_id)
+            
+            elif data == "dota_last":
+                await self._dota_last_match(query, context, user_id, account_id)
+            
+            elif data == "dota_profile":
+                await self._dota_profile(query, context, account_id)
+            
+            elif data == "dota_toxic":
+                await self._dota_toxic(query, context, user_id, account_id)
+            
+            elif data == "dota_shame_toggle":
+                await self._dota_shame_toggle(query, context, user_id, chat_id)
+            
+            elif data == "dota_unlink":
+                await self.steam_repo.unlink(user_id)
+                await query.edit_message_text(
+                    "✅ Steam отвязан!",
+                    reply_markup=Keyboards.back_to_menu()
+                )
+                
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                logger.error(f"Dota callback error: {e}")
+    
+    async def _dota_check_game(self, query, context, user_id: int, account_id: int) -> None:
+        """Проверяет в игре ли пользователь."""
+        name = query.from_user.first_name
+        
+        await query.edit_message_text(f"🔍 Чекаю {name}...")
+        
+        live = await self.opendota.get_live_game(account_id)
+        
+        if live:
+            mmr_text = f"📊 ~{live.avg_mmr} MMR" if live.avg_mmr else ""
+            
+            await query.edit_message_text(
+                f"🎮 *{name} в игре!*\n\n"
+                f"⏱ *{live.time_str}* минута\n"
+                f"🦸 {live.player_hero}\n"
+                f"⚔️ {live.player_team}\n"
+                f"🎯 {live.game_mode}\n"
+                f"{mmr_text}",
+                parse_mode="Markdown",
+                reply_markup=Keyboards.back_to_menu()
+            )
+        else:
+            await query.edit_message_text(
+                f"😴 *{name}* сейчас не в игре\n\n"
+                f"_Или матч не отслеживается OpenDota_",
+                parse_mode="Markdown",
+                reply_markup=Keyboards.back_to_menu()
+            )
+    
+    async def _dota_last_match(self, query, context, user_id: int, account_id: int) -> None:
+        """Показывает детальную стату последнего матча."""
+        name = query.from_user.first_name
+        
+        await query.edit_message_text(f"🔍 Загружаю матч {name}...")
+        
+        match = await self.opendota.get_match_details(account_id)
+        
+        if not match:
+            await query.edit_message_text(
+                "❌ Не удалось получить данные матча",
+                reply_markup=Keyboards.back_to_menu()
+            )
+            return
+        
+        result = "✅ *ПОБЕДА*" if match["win"] else "❌ *ПОРАЖЕНИЕ*"
+        kda = f"{match['kills']}/{match['deaths']}/{match['assists']}"
+        
+        def rank_emoji(rank):
+            if rank == 1:
+                return "🥇"
+            elif rank == 2:
+                return "🥈"
+            elif rank == 3:
+                return "🥉"
+            return f"#{rank}"
+        
+        def fmt(n):
+            if n >= 1000:
+                return f"{n/1000:.1f}k"
+            return str(n)
+        
+        text = (
+            f"📊 *Последний матч {name}*\n\n"
+            f"{result} • {match['hero']}\n"
+            f"⏱ {match['duration']} мин\n\n"
+            f"⚔️ *KDA:* {kda}\n"
+            f"💰 *GPM:* {match['gpm']} {rank_emoji(match['gpm_rank'])}\n"
+            f"📈 *XPM:* {match['xpm']}\n\n"
+            f"🗡 *Урон героям:* {fmt(match['hero_damage'])} {rank_emoji(match['hero_dmg_rank'])}\n"
+            f"🏰 *Урон вышкам:* {fmt(match['tower_damage'])} {rank_emoji(match['tower_dmg_rank'])}\n\n"
+            f"🌾 *LH/DN:* {match['last_hits']}/{match['denies']}\n"
+            f"💎 *Net Worth:* {fmt(match['net_worth'])}\n"
+            f"\n🔗 [Подробнее](https://www.opendota.com/matches/{match['match_id']})"
+        )
+        
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=Keyboards.back_to_menu()
+        )
+    
+    async def _dota_profile(self, query, context, account_id: int) -> None:
+        """Показывает профиль игрока."""
+        profile = await self.opendota.get_profile(account_id)
+        
+        if not profile:
+            await query.edit_message_text(
+                "❌ Не удалось загрузить профиль",
+                reply_markup=Keyboards.back_to_menu()
+            )
+            return
+        
+        mmr_text = f"📈 ~{profile.mmr_estimate} MMR" if profile.mmr_estimate else ""
+        
+        await query.edit_message_text(
+            f"👤 *{profile.persona_name}*\n\n"
+            f"🏅 {profile.rank_name}\n"
+            f"{mmr_text}\n\n"
+            f"🔗 [OpenDota](https://www.opendota.com/players/{account_id}) | "
+            f"[Dotabuff](https://www.dotabuff.com/players/{account_id})",
+            parse_mode="Markdown",
+            reply_markup=Keyboards.back_to_menu()
+        )
+    
+    async def _dota_toxic(self, query, context, user_id: int, account_id: int) -> None:
+        """Показывает анализ токсичности."""
+        name = query.from_user.first_name
+        
+        await query.edit_message_text(f"🔍 Анализирую токсичность {name}...")
+        
+        words = await self.opendota.get_wordcloud(account_id)
+        
+        if not words:
+            await query.edit_message_text(
+                f"😇 *{name}* — святой человек!\n\n"
+                f"_Либо не пишет в чат, либо данных нет_",
+                parse_mode="Markdown",
+                reply_markup=Keyboards.back_to_menu()
+            )
+            return
+        
+        sorted_words = sorted(words.items(), key=lambda x: x[1], reverse=True)
+        top_words = sorted_words[:10]
+        total_words = sum(words.values())
+        
+        toxic_words = {"gg", "ez", "noob", "report", "trash", "bad", "wtf", "fuck", "shit", "idiot", 
+                       "stupid", "dog", "animal", "cyka", "blyat", "сука", "блять", "gg ez"}
+        
+        toxic_count = sum(count for word, count in words.items() if word.lower() in toxic_words)
+        toxic_percent = (toxic_count / total_words * 100) if total_words > 0 else 0
+        
+        if toxic_percent > 20:
+            rating = "☢️ ЯДЕРНЫЙ ТОКСИК"
+        elif toxic_percent > 10:
+            rating = "🔥 Токсичный"
+        elif toxic_percent > 5:
+            rating = "😤 Немного солёный"
+        else:
+            rating = "😇 Почти ангел"
+        
+        lines = [f"💬 *Словарь {name}*\n"]
+        lines.append(f"{rating}\n")
+        
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        
+        for i, (word, count) in enumerate(top_words):
+            medal = medals[i] if i < len(medals) else "•"
+            lines.append(f"{medal} `{word}` — {count}")
+        
+        lines.append(f"\n📊 Всего слов: {total_words}")
+        
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=Keyboards.back_to_menu()
+        )
+    
+    async def _dota_shame_toggle(self, query, context, user_id: int, chat_id: int) -> None:
+        """Переключает подписку на позор."""
+        is_subscribed = await self.steam_repo.is_shame_subscribed(user_id, chat_id)
+        
+        if is_subscribed:
+            await self.steam_repo.unsubscribe_shame(user_id, chat_id)
+            text = "❌ *Подписка отключена*\n\nБольше никакого позора... пока что 👀"
+        else:
+            await self.steam_repo.subscribe_shame(user_id, chat_id)
+            text = "✅ *Подписка активирована!*\n\nТеперь после каждой катки бот определит самого бесполезного 😈"
+        
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=Keyboards.back_to_menu()
+        )
