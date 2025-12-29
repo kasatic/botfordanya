@@ -24,10 +24,43 @@ class Keyboards:
                 InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings"),
             ],
             [
+                InlineKeyboardButton("🎮 Dota 2", callback_data="menu_dota"),
                 InlineKeyboardButton("🤍 Белый список", callback_data="menu_whitelist"),
+            ],
+            [
                 InlineKeyboardButton("❓ Помощь", callback_data="menu_help"),
             ],
         ])
+    
+    @staticmethod
+    def dota_menu(is_linked: bool = False, is_shame_subscribed: bool = False) -> InlineKeyboardMarkup:
+        """Меню Dota 2."""
+        buttons = []
+        
+        if is_linked:
+            buttons.append([
+                InlineKeyboardButton("🎮 В игре?", callback_data="dota_game"),
+                InlineKeyboardButton("📊 Последний матч", callback_data="dota_last"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("👤 Мой профиль", callback_data="dota_profile"),
+                InlineKeyboardButton("☢️ Токсичность", callback_data="dota_toxic"),
+            ])
+            
+            shame_text = "😈 Позор: ВКЛ" if is_shame_subscribed else "😇 Позор: ВЫКЛ"
+            buttons.append([
+                InlineKeyboardButton(shame_text, callback_data="dota_shame_toggle"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("🔗 Отвязать Steam", callback_data="dota_unlink"),
+            ])
+        else:
+            buttons.append([
+                InlineKeyboardButton("🔗 Привязать Steam", callback_data="dota_link_info"),
+            ])
+        
+        buttons.append(Keyboards.back_button())
+        return InlineKeyboardMarkup(buttons)
     
     @staticmethod
     def back_to_menu() -> InlineKeyboardMarkup:
