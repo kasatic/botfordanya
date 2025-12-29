@@ -2,7 +2,7 @@ name: Deploy to VDS
 
 on:
   push:
-    branches: [master, main]  # Деплой при пуше в master или main
+    branches: [master, main]
 
 jobs:
   deploy:
@@ -20,6 +20,9 @@ jobs:
             
             echo "📥 Pulling latest code..."
             git pull origin master || git pull origin main
+            
+            echo "⚙️ Creating .env..."
+            echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
             
             echo "🐳 Rebuilding..."
             docker-compose down
