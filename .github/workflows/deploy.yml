@@ -1,0 +1,32 @@
+name: Deploy to VDS
+
+on:
+  push:
+    branches: [master, main]  # Деплой при пуше в master или main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🚀 Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VDS_HOST }}
+          username: ${{ secrets.VDS_USER }}
+          password: ${{ secrets.VDS_PASSWORD }}
+          script: |
+            cd /opt/antispam-bot
+            
+            echo "📥 Pulling latest code..."
+            git pull origin master || git pull origin main
+            
+            echo "🐳 Rebuilding..."
+            docker-compose down
+            docker-compose up -d --build
+            
+            echo "🧹 Cleanup..."
+            docker image prune -f
+            
+            echo "✅ Done!"
+            docker-compose ps

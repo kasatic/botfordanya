@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+venv
+.venv
+.pytest_cache
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Environment
+.env
+.env.local
+
+# Data (монтируется как volume)
+data/*.db
+
+# Docs
+*.md
+!requirements.txt
+
+# CI/CD
+.github
+scripts
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,10 +1,42 @@
+# Python
 venv/
+.venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
 .env
-.DS_Store
+.env.local
+
+# IDE
 .idea/
 .vscode/
-*.pyc
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
 *.db
+data/*.db
+
+# Legacy files
 token.txt
 admin.txt
+
+# Logs
+*.log
+logs/
+
+# SSH keys (никогда не коммить!)
+*.pem
+id_rsa*
+*.key
