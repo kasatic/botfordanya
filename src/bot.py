@@ -1,81 +1,105 @@
 """
-Главный модуль бота с graceful shutdown.
+Главный модуль бота с graceful shutdown и Dependency Injection.
 """
+
 import logging
 import signal
 import asyncio
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
-from src.config import config
+from src.core.config import config
+from src.container import ServiceContainer
+from src.factories import ContainerFactory
 from src.database import (
-    Database, SpamRepository, ViolationRepository, 
-    WhitelistRepository, ChatSettingsRepository, BanStatsRepository
+    Database,
+    SpamRepository,
+    ViolationRepository,
+    WhitelistRepository,
+    ChatSettingsRepository,
+    BanStatsRepository,
+    SteamLinkRepository,
 )
-from src.database.steam_repository import SteamLinkRepository
 from src.services import SpamDetector, BanService, AdminService, DotaService
 from src.services.opendota_service import OpenDotaService
 from src.services.shame_service import ShameService
+from src.services.database_cleanup import DatabaseCleanupService
 from src.handlers import register_spam_handlers, MenuHandlers, ModerationHandlers
 from src.handlers.dota import DotaHandlers
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+async def error_handler(update, context):
+    """Глобальный обработчик ошибок."""
+    logger.error(f"Exception while handling an update:", exc_info=context.error)
+
+    # Логируем информацию об update если доступна
+    if update:
+        logger.error(f"Update that caused error: {update}")
+
+
 class Bot:
-    """Главный класс бота."""
-    
+    """
+    Главный класс бота с Dependency Injection.
+
+    Использует DI контейнер для управления зависимостями,
+    что делает код более тестируемым и поддерживаемым.
+    """
+
     def __init__(self):
         self.application: Application = None
-        self.db: Database = None
-        self.opendota: OpenDotaService = None
-        self.shame_service: ShameService = None
+        self.container: ServiceContainer = None
         self._shutdown_event = asyncio.Event()
-    
+
     async def setup(self) -> None:
-        """Инициализация бота."""
-        # База данных
-        self.db = Database(config.files.database)
-        await self.db.init_schema()
-        
-        # Репозитории
-        spam_repo = SpamRepository(self.db)
-        violation_repo = ViolationRepository(self.db)
-        whitelist_repo = WhitelistRepository(self.db)
-        settings_repo = ChatSettingsRepository(self.db)
-        stats_repo = BanStatsRepository(self.db)
-        steam_repo = SteamLinkRepository(self.db)
-        await steam_repo.init_table()
-        
-        # Сервисы
-        spam_detector = SpamDetector(spam_repo, whitelist_repo, settings_repo)
-        ban_service = BanService(violation_repo, spam_repo, stats_repo)
-        admin_service = AdminService(config.files.admins)
-        dota_service = DotaService(config.files.dota_users)
-        self.opendota = OpenDotaService()
-        
-        # Приложение
+        """
+        Инициализация бота с использованием DI контейнера.
+
+        Все зависимости создаются и регистрируются через фабрики,
+        что обеспечивает единую точку конфигурации.
+        """
+        # Создаем и настраиваем DI контейнер
+        self.container = await ContainerFactory.create_configured_container()
+
+        # Создаем Telegram Application
         self.application = Application.builder().token(config.token).build()
-        
-        # Обработчики меню
+
+        # Регистрируем сервисы, зависящие от Application
+        ContainerFactory.register_application_services(self.container, self.application)
+
+        # Получаем сервисы из контейнера
+        spam_detector = self.container.get(SpamDetector)
+        ban_service = self.container.get(BanService)
+        admin_service = self.container.get(AdminService)
+        dota_service = self.container.get(DotaService)
+        opendota = self.container.get(OpenDotaService)
+
+        # Получаем репозитории
+        whitelist_repo = self.container.get(WhitelistRepository)
+        violation_repo = self.container.get(ViolationRepository)
+        settings_repo = self.container.get(ChatSettingsRepository)
+        stats_repo = self.container.get(BanStatsRepository)
+        steam_repo = self.container.get(SteamLinkRepository)
+
+        # Создаем обработчики (handlers не регистрируются в контейнере,
+        # так как они не переиспользуются и создаются один раз)
         menu = MenuHandlers(
-            ban_service, admin_service, whitelist_repo,
-            violation_repo, settings_repo, stats_repo,
-            steam_repo=steam_repo, opendota=self.opendota
+            ban_service,
+            admin_service,
+            whitelist_repo,
+            violation_repo,
+            settings_repo,
+            stats_repo,
+            steam_repo=steam_repo,
+            opendota=opendota,
         )
-        
-        # Обработчики модерации
-        moderation = ModerationHandlers(
-            ban_service, admin_service, whitelist_repo, violation_repo
-        )
-        
-        # Обработчики Dota
-        dota_handlers = DotaHandlers(self.opendota, steam_repo)
-        
+
+        moderation = ModerationHandlers(ban_service, admin_service, whitelist_repo, violation_repo)
+
+        dota_handlers = DotaHandlers(opendota, steam_repo)
+
         # Команды
         self.application.add_handler(CommandHandler("start", menu.start_command))
         self.application.add_handler(CommandHandler("menu", menu.menu_command))
@@ -84,7 +108,7 @@ class Bot:
         self.application.add_handler(CommandHandler("top", moderation.top_command))
         self.application.add_handler(CommandHandler("trust", moderation.trust_command))
         self.application.add_handler(CommandHandler("untrust", moderation.untrust_command))
-        
+
         # Dota команды
         self.application.add_handler(CommandHandler("link", dota_handlers.link_command))
         self.application.add_handler(CommandHandler("unlink", dota_handlers.unlink_command))
@@ -94,44 +118,32 @@ class Bot:
         self.application.add_handler(CommandHandler("profile", dota_handlers.profile_command))
         self.application.add_handler(CommandHandler("toxic", dota_handlers.toxic_command))
         self.application.add_handler(CommandHandler("shame", dota_handlers.shame_command))
-        
-        # Shame service
-        self.shame_service = ShameService(self.opendota, steam_repo, self.application)
-        
+
         # Callback handlers (порядок важен!)
-        self.application.add_handler(CallbackQueryHandler(
-            menu.handle_menu_callback, 
-            pattern="^menu_|^chatstats_|^noop$"
-        ))
-        self.application.add_handler(CallbackQueryHandler(
-            menu.handle_dota_callback,
-            pattern="^dota_"
-        ))
-        self.application.add_handler(CallbackQueryHandler(
-            menu.handle_settings_callback, 
-            pattern="^settings_|^set_"
-        ))
-        self.application.add_handler(CallbackQueryHandler(
-            menu.handle_whitelist_callback, 
-            pattern="^whitelist_|^trust_|^untrust_"
-        ))
-        self.application.add_handler(CallbackQueryHandler(
-            moderation.handle_moderation_callback,
-            pattern="^unban_|^pardon_|^userinfo_|^cancel$"
-        ))
-        
-        # Спам-хендлеры
-        register_spam_handlers(
-            self.application, spam_detector, ban_service, 
-            admin_service, dota_service
+        self.application.add_handler(
+            CallbackQueryHandler(menu.handle_menu_callback, pattern="^menu_|^chatstats_|^ignore$")
         )
-        
+        self.application.add_handler(CallbackQueryHandler(menu.handle_dota_callback, pattern="^dota_"))
+        self.application.add_handler(
+            CallbackQueryHandler(menu.handle_settings_callback, pattern="^settings_|^setting_")
+        )
+        self.application.add_handler(CallbackQueryHandler(menu.handle_whitelist_callback, pattern="^whitelist_"))
+        self.application.add_handler(
+            CallbackQueryHandler(moderation.handle_moderation_callback, pattern="^action_|^user_info_")
+        )
+
+        # Спам-хендлеры
+        register_spam_handlers(self.application, spam_detector, ban_service, admin_service, dota_service)
+
+        # Глобальный error handler
+        self.application.add_error_handler(error_handler)
+
         logger.info("✅ Bot initialized")
-    
+
     async def run(self) -> None:
         """Запуск бота."""
         await self.setup()
-        
+
         # Graceful shutdown
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -139,28 +151,33 @@ class Bot:
                 loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
             except NotImplementedError:
                 signal.signal(sig, lambda s, f: asyncio.create_task(self.shutdown()))
-        
+
         logger.info("🚀 Bot started!")
-        
+
         await self.application.initialize()
         await self.application.start()
-        
+
         # Регистрируем команды в меню Telegram
         await self._set_commands()
-        
+
         await self.application.updater.start_polling()
-        
-        # Запускаем shame service
-        await self.shame_service.start()
-        
+
+        # Запускаем фоновые сервисы из контейнера
+        shame_service = self.container.get(ShameService)
+        await shame_service.start()
+
+        cleanup_service = self.container.get(DatabaseCleanupService)
+        await cleanup_service.start()
+
         await self._shutdown_event.wait()
-    
+
     async def _set_commands(self) -> None:
         """Регистрирует команды в меню Telegram."""
         commands = [
             BotCommand("menu", "🏠 Главное меню"),
             BotCommand("stats", "📊 Моя статистика"),
             BotCommand("top", "🏆 Топ нарушителей"),
+            BotCommand("settings", "⚙️ Настройки чата"),
             # Dota 2
             BotCommand("link", "🔗 Привязать Steam"),
             BotCommand("game", "🎮 Проверить в игре ли"),
@@ -174,25 +191,48 @@ class Bot:
             BotCommand("untrust", "⛔ Убрать из белого списка"),
             BotCommand("help", "❓ Помощь"),
         ]
-        
+
         await self.application.bot.set_my_commands(commands)
         logger.info("📋 Bot commands registered")
-    
+
     async def shutdown(self) -> None:
-        """Graceful shutdown."""
+        """
+        Graceful shutdown с очисткой всех ресурсов.
+
+        Останавливает сервисы в правильном порядке:
+        1. Фоновые задачи (cleanup, shame)
+        2. HTTP сессии (OpenDota)
+        3. База данных
+        4. Telegram Application
+        """
         logger.info("🛑 Shutting down...")
-        
-        if self.shame_service:
-            await self.shame_service.stop()
-        
-        if self.opendota:
-            await self.opendota.close()
-        
+
+        if self.container:
+            # Останавливаем фоновые сервисы
+            cleanup_service = self.container.try_get(DatabaseCleanupService)
+            if cleanup_service:
+                await cleanup_service.stop()
+
+            shame_service = self.container.try_get(ShameService)
+            if shame_service:
+                await shame_service.stop()
+
+            # Закрываем HTTP сессии
+            opendota = self.container.try_get(OpenDotaService)
+            if opendota:
+                await opendota.close()
+
+            # Закрываем базу данных
+            db = self.container.try_get(Database)
+            if db:
+                await db.close()
+
+        # Останавливаем Telegram Application
         if self.application:
             await self.application.updater.stop()
             await self.application.stop()
             await self.application.shutdown()
-        
+
         self._shutdown_event.set()
         logger.info("👋 Bot stopped")
 

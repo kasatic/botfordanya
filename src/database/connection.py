@@ -1,117 +1,85 @@
 """
 Асинхронное подключение к SQLite через aiosqlite.
 """
+
 import logging
+import asyncio
 import aiosqlite
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class Database:
     """Асинхронный менеджер подключения к БД."""
-    
+
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self._conn: Optional[aiosqlite.Connection] = None
+        self._lock = asyncio.Lock()
         self._ensure_directory()
-    
+
     def _ensure_directory(self) -> None:
         """Создаёт директорию для БД если нужно."""
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-    
+
+    async def init(self) -> None:
+        """Инициализация долгоживущего соединения."""
+        async with self._lock:
+            if self._conn is None:
+                self._conn = await aiosqlite.connect(self.db_path)
+                self._conn.row_factory = aiosqlite.Row
+                logger.info("✅ Database connection established")
+
+                # Автоматически применяем миграции после подключения
+                await self.migrate()
+
+    async def close(self) -> None:
+        """Закрытие соединения."""
+        async with self._lock:
+            if self._conn is not None:
+                await self._conn.close()
+                self._conn = None
+                logger.info("✅ Database connection closed")
+
     @asynccontextmanager
     async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
         """Async context manager для подключения."""
-        conn = await aiosqlite.connect(self.db_path)
-        conn.row_factory = aiosqlite.Row
-        try:
-            yield conn
-            await conn.commit()
-        except Exception as e:
-            await conn.rollback()
-            logger.error(f"Database error: {e}")
-            raise
-        finally:
-            await conn.close()
-    
+        async with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database not initialized. Call init() first.")
+
+            try:
+                yield self._conn
+                await self._conn.commit()
+            except Exception as e:
+                await self._conn.rollback()
+                logger.error(f"Database error: {e}")
+                raise
+
+    async def migrate(self) -> None:
+        """Применяет все необходимые миграции к базе данных."""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized. Call init() first.")
+
+        # Импортируем здесь, чтобы избежать циклических импортов
+        from .migrations_manager import MigrationManager
+        from .migrations import get_migrations
+
+        logger.info("🔄 Starting database migration...")
+        migration_manager = MigrationManager(self._conn)
+        migrations = get_migrations()
+        await migration_manager.migrate_to_latest(migrations)
+        logger.info("✅ Database migration completed")
+
     async def init_schema(self) -> None:
-        """Инициализация схемы БД."""
-        async with self.connection() as conn:
-            # Таблица спама
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS spam_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    chat_id INTEGER NOT NULL,
-                    spam_type TEXT NOT NULL,
-                    content_hash TEXT,
-                    timestamp TEXT NOT NULL
-                )
-            """)
-            
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_spam_user_type 
-                ON spam_records(user_id, chat_id, spam_type, timestamp)
-            """)
-            
-            # Таблица нарушений
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS violations (
-                    user_id INTEGER NOT NULL,
-                    chat_id INTEGER NOT NULL,
-                    count INTEGER DEFAULT 0,
-                    last_violation TEXT,
-                    banned_until TEXT,
-                    PRIMARY KEY (user_id, chat_id)
-                )
-            """)
-            
-            # Белый список
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS whitelist (
-                    user_id INTEGER NOT NULL,
-                    chat_id INTEGER NOT NULL,
-                    added_by INTEGER,
-                    added_at TEXT,
-                    PRIMARY KEY (user_id, chat_id)
-                )
-            """)
-            
-            # Настройки чатов
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS chat_settings (
-                    chat_id INTEGER PRIMARY KEY,
-                    sticker_limit INTEGER DEFAULT 3,
-                    sticker_window INTEGER DEFAULT 30,
-                    text_limit INTEGER DEFAULT 3,
-                    text_window INTEGER DEFAULT 20,
-                    image_limit INTEGER DEFAULT 3,
-                    image_window INTEGER DEFAULT 30,
-                    video_limit INTEGER DEFAULT 3,
-                    video_window INTEGER DEFAULT 30,
-                    warning_enabled INTEGER DEFAULT 1,
-                    updated_at TEXT
-                )
-            """)
-            
-            # Статистика банов
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS ban_stats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    chat_id INTEGER NOT NULL,
-                    ban_type TEXT NOT NULL,
-                    ban_minutes INTEGER NOT NULL,
-                    reason TEXT,
-                    timestamp TEXT NOT NULL
-                )
-            """)
-            
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_ban_stats_chat_time 
-                ON ban_stats(chat_id, timestamp)
-            """)
-            
-            logger.info("✅ Database schema initialized")
+        """
+        DEPRECATED: Используйте migrate() вместо этого метода.
+
+        Этот метод оставлен для обратной совместимости и теперь просто вызывает migrate().
+        Миграции применяются автоматически при вызове init().
+        """
+        logger.warning("⚠️ init_schema() is deprecated. Migrations are now applied automatically during init().")
+        await self.migrate()

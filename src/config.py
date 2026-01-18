@@ -1,74 +1,28 @@
 """
-Конфигурация бота.
-Все настройки в одном месте для удобного управления.
+DEPRECATED: Используйте src.core.config вместо этого модуля.
+
+Этот файл оставлен для обратной совместимости.
 """
-import os
-from dataclasses import dataclass
-from functools import lru_cache
-from dotenv import load_dotenv
 
-load_dotenv()
+import warnings
 
+# Импортируем из нового расположения
+from src.core.config import (
+    Config,
+    SpamLimits,
+    BanConfig,
+    Files,
+    get_config,
+    config,
+)
 
-@dataclass(frozen=True, slots=True)
-class SpamLimits:
-    """Лимиты для разных типов контента."""
-    sticker_limit: int = 3
-    sticker_window: int = 30
-    
-    text_limit: int = 3
-    text_window: int = 20
-    
-    image_limit: int = 3
-    image_window: int = 30
-    
-    video_limit: int = 3
-    video_window: int = 30
+warnings.warn("src.config is deprecated, use src.core.config instead", DeprecationWarning, stacklevel=2)
 
-
-@dataclass(frozen=True, slots=True)
-class BanConfig:
-    """Конфигурация банов."""
-    durations: tuple = (10, 60, 300, 1440)
-    default_duration: int = 2880
-    
-    def get_duration(self, violation_number: int) -> int:
-        """Возвращает длительность бана в минутах."""
-        if violation_number <= 0:
-            return self.durations[0]
-        if violation_number <= len(self.durations):
-            return self.durations[violation_number - 1]
-        return self.default_duration
-
-
-@dataclass(frozen=True, slots=True)
-class Files:
-    """Пути к файлам."""
-    database: str = "data/bot.db"
-    dota_users: str = "data/godota.txt"
-    admins: str = "data/admins.txt"
-
-
-class Config:
-    """Главный конфиг бота."""
-    __slots__ = ('token', 'spam', 'ban', 'files', 'dota_triggers')
-    
-    def __init__(self):
-        self.token = os.getenv("BOT_TOKEN")
-        if not self.token:
-            raise ValueError("BOT_TOKEN не найден в .env файле")
-        
-        self.spam = SpamLimits()
-        self.ban = BanConfig()
-        self.files = Files()
-        self.dota_triggers = ("го дота", "годота", "go dota", "godota")
-
-
-@lru_cache(maxsize=1)
-def get_config() -> Config:
-    """Singleton конфиг с кэшированием."""
-    return Config()
-
-
-# Для обратной совместимости
-config = get_config()
+__all__ = [
+    "Config",
+    "SpamLimits",
+    "BanConfig",
+    "Files",
+    "get_config",
+    "config",
+]

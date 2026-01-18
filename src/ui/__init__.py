@@ -1,4 +1,5 @@
 """UI компоненты бота."""
+
 from .keyboards import Keyboards
 from .messages import Messages
 

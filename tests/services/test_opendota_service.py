@@ -2,11 +2,15 @@
 Тесты для OpenDota сервиса.
 """
 import pytest
+import asyncio
+import aiohttp
+from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from datetime import datetime
 
 # NOTE: Если тесты не запускаются из-за ошибки в src/config.py,
 # нужно исправить конфликт __slots__ с default values в dataclass.
 # Для Python 3.10+ используйте slots=True в декораторе @dataclass.
-from src.services.opendota_service import OpenDotaService, PlayerProfile, LiveGame
+from src.services.opendota_service import OpenDotaService, PlayerProfile, LiveGame, retry_with_backoff
 
 
 class TestSteamId64ToAccountId:
@@ -393,3 +397,415 @@ class TestLiveGame:
         )
         
         assert game.time_str == "1:05"
+
+
+
+class TestRetryWithBackoff:
+    """Тесты для декоратора retry_with_backoff."""
+    
+    @pytest.mark.asyncio
+    async def test_retry_success_on_first_attempt(self):
+        """Тест успешного выполнения с первой попытки."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            return "success"
+        
+        result = await mock_func()
+        
+        assert result == "success"
+        assert call_count == 1
+    
+    @pytest.mark.asyncio
+    async def test_retry_success_on_second_attempt(self):
+        """Тест успешного выполнения со второй попытки."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise aiohttp.ClientError("Network error")
+            return "success"
+        
+        result = await mock_func()
+        
+        assert result == "success"
+        assert call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_retry_success_on_third_attempt(self):
+        """Тест успешного выполнения с третьей попытки."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise asyncio.TimeoutError("Timeout")
+            return "success"
+        
+        result = await mock_func()
+        
+        assert result == "success"
+        assert call_count == 3
+    
+    @pytest.mark.asyncio
+    async def test_retry_all_attempts_fail(self):
+        """Тест провала всех попыток."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            raise aiohttp.ClientError("Network error")
+        
+        with pytest.raises(aiohttp.ClientError):
+            await mock_func()
+        
+        assert call_count == 3
+    
+    @pytest.mark.asyncio
+    async def test_retry_exponential_backoff_timing(self):
+        """Тест exponential backoff задержек."""
+        call_times = []
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.1)
+        async def mock_func():
+            call_times.append(datetime.now())
+            raise aiohttp.ClientError("Network error")
+        
+        try:
+            await mock_func()
+        except aiohttp.ClientError:
+            pass
+        
+        assert len(call_times) == 3
+        
+        # Проверяем задержки между попытками
+        # Первая задержка: ~0.1s (base_delay * 2^0)
+        delay1 = (call_times[1] - call_times[0]).total_seconds()
+        assert 0.08 < delay1 < 0.15  # Допускаем небольшую погрешность
+        
+        # Вторая задержка: ~0.2s (base_delay * 2^1)
+        delay2 = (call_times[2] - call_times[1]).total_seconds()
+        assert 0.18 < delay2 < 0.25
+    
+    @pytest.mark.asyncio
+    async def test_retry_with_timeout_error(self):
+        """Тест retry при TimeoutError."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise asyncio.TimeoutError()
+            return "success"
+        
+        result = await mock_func()
+        
+        assert result == "success"
+        assert call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_retry_does_not_catch_other_exceptions(self):
+        """Тест что декоратор не ловит другие исключения."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("Some other error")
+        
+        with pytest.raises(ValueError):
+            await mock_func()
+        
+        # Должна быть только одна попытка, т.к. ValueError не в списке retry exceptions
+        assert call_count == 1
+    
+    @pytest.mark.asyncio
+    async def test_retry_custom_exceptions(self):
+        """Тест retry с кастомными исключениями."""
+        call_count = 0
+        
+        @retry_with_backoff(max_retries=3, base_delay=0.01, exceptions=(ValueError,))
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ValueError("Custom error")
+            return "success"
+        
+        result = await mock_func()
+        
+        assert result == "success"
+        assert call_count == 2
+
+
+class TestOpenDotaServiceRetry:
+    """Тесты retry логики в OpenDotaService."""
+    
+    @pytest.mark.asyncio
+    async def test_fetch_success_on_first_attempt(self):
+        """Тест успешного запроса с первой попытки."""
+        service = OpenDotaService()
+        
+        # Мокаем сессию
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={"data": "test"})
+        
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        
+        service._session = mock_session
+        
+        result = await service._fetch("/test")
+        
+        assert result == {"data": "test"}
+        assert service.failed_requests == 0
+    
+    @pytest.mark.asyncio
+    async def test_fetch_retry_on_network_error(self):
+        """Тест retry при network error."""
+        service = OpenDotaService()
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            
+            if call_count < 2:
+                raise aiohttp.ClientError("Network error")
+            
+            # Успех на второй попытке
+            mock_response = AsyncMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"data": "success"})
+            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_response.__aexit__ = AsyncMock(return_value=None)
+            return mock_response
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        result = await service._fetch("/test")
+        
+        assert result == {"data": "success"}
+        assert call_count == 2
+        assert service.failed_requests == 0
+    
+    @pytest.mark.asyncio
+    async def test_fetch_all_retries_fail_graceful_degradation(self):
+        """Тест graceful degradation при провале всех попыток."""
+        service = OpenDotaService()
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise aiohttp.ClientError("Network error")
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        result = await service._fetch("/test")
+        
+        # Должен вернуть None вместо падения
+        assert result is None
+        assert call_count == 3  # 3 попытки
+        assert service.failed_requests == 1
+    
+    @pytest.mark.asyncio
+    async def test_fetch_timeout_error_retry(self):
+        """Тест retry при timeout error."""
+        service = OpenDotaService()
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            
+            if call_count < 3:
+                raise asyncio.TimeoutError()
+            
+            # Успех на третьей попытке
+            mock_response = AsyncMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"data": "success"})
+            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_response.__aexit__ = AsyncMock(return_value=None)
+            return mock_response
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        result = await service._fetch("/test")
+        
+        assert result == {"data": "success"}
+        assert call_count == 3
+        assert service.failed_requests == 0
+    
+    @pytest.mark.asyncio
+    async def test_fetch_invalid_endpoint_no_retry(self):
+        """Тест что невалидный endpoint не вызывает retry."""
+        service = OpenDotaService()
+        
+        # Мокаем сессию (не должна быть вызвана)
+        mock_session = AsyncMock()
+        service._session = mock_session
+        
+        result = await service._fetch("invalid")  # Без начального /
+        
+        assert result is None
+        assert service.failed_requests == 0
+        # Сессия не должна быть вызвана
+        mock_session.get.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_fetch_404_no_retry(self):
+        """Тест что 404 не вызывает retry."""
+        service = OpenDotaService()
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            
+            mock_response = AsyncMock()
+            mock_response.status = 404
+            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_response.__aexit__ = AsyncMock(return_value=None)
+            return mock_response
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        result = await service._fetch("/test")
+        
+        assert result is None
+        assert call_count == 1  # Только одна попытка
+        assert service.failed_requests == 0
+    
+    @pytest.mark.asyncio
+    async def test_fetch_unexpected_exception_graceful_degradation(self):
+        """Тест graceful degradation при неожиданном исключении."""
+        service = OpenDotaService()
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("Unexpected error")
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        result = await service._fetch("/test")
+        
+        # Должен вернуть None вместо падения
+        assert result is None
+        assert call_count == 1  # Неожиданные исключения не retry
+        assert service.failed_requests == 1
+    
+    @pytest.mark.asyncio
+    async def test_failed_requests_counter_increments(self):
+        """Тест что счетчик failed_requests увеличивается."""
+        service = OpenDotaService()
+        
+        async def mock_get(*args, **kwargs):
+            raise aiohttp.ClientError("Network error")
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        # Мокаем rate limiter
+        service._check_rate_limit = AsyncMock()
+        
+        # Первый провал
+        await service._fetch("/test1")
+        assert service.failed_requests == 1
+        
+        # Второй провал
+        await service._fetch("/test2")
+        assert service.failed_requests == 2
+        
+        # Третий провал
+        await service._fetch("/test3")
+        assert service.failed_requests == 3
+    
+    @pytest.mark.asyncio
+    async def test_fetch_respects_rate_limit(self):
+        """Тест что retry логика учитывает rate limit."""
+        service = OpenDotaService()
+        
+        rate_limit_calls = 0
+        
+        async def mock_rate_limit():
+            nonlocal rate_limit_calls
+            rate_limit_calls += 1
+        
+        service._check_rate_limit = mock_rate_limit
+        
+        call_count = 0
+        
+        async def mock_get(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            
+            if call_count < 2:
+                raise aiohttp.ClientError("Network error")
+            
+            mock_response = AsyncMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={"data": "success"})
+            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_response.__aexit__ = AsyncMock(return_value=None)
+            return mock_response
+        
+        mock_session = AsyncMock()
+        mock_session.get = mock_get
+        service._session = mock_session
+        
+        await service._fetch("/test")
+        
+        # Rate limit должен быть проверен перед каждой попыткой
+        assert rate_limit_calls == 2
+        assert call_count == 2

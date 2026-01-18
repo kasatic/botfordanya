@@ -1,0 +1,81 @@
+"""
+Миграция 002: Пример новой миграции (ШАБЛОН).
+
+Этот файл является шаблоном для создания новых миграций.
+Скопируйте его, переименуйте и измените под свои нужды.
+
+Описание изменений:
+- Добавляет таблицу example_table
+- Создаёт индекс для быстрого поиска
+"""
+import aiosqlite
+
+
+async def upgrade(conn: aiosqlite.Connection) -> None:
+    """
+    Применение миграции: создание новой таблицы.
+    
+    Здесь вы описываете изменения, которые нужно применить к базе данных.
+    """
+    # Создаём новую таблицу
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS example_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            data TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    
+    # Создаём индекс для ускорения поиска
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_example_user 
+        ON example_table(user_id, created_at)
+    """)
+
+
+async def downgrade(conn: aiosqlite.Connection) -> None:
+    """
+    Откат миграции: удаление таблицы.
+    
+    Здесь вы описываете, как откатить изменения.
+    Важно: downgrade должен полностью отменить upgrade!
+    """
+    # Удаляем индекс
+    await conn.execute("DROP INDEX IF EXISTS idx_example_user")
+    
+    # Удаляем таблицу
+    await conn.execute("DROP TABLE IF EXISTS example_table")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ ЭТОГО ШАБЛОНА
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# 1. Скопируйте этот файл и переименуйте:
+#    migration_002_example.py.template -> migration_XXX_your_description.py
+#    где XXX - следующий номер версии (002, 003, 004...)
+#
+# 2. Измените docstring в начале файла:
+#    - Укажите правильный номер миграции
+#    - Опишите, что делает миграция
+#
+# 3. Реализуйте функцию upgrade():
+#    - Напишите SQL для применения изменений
+#    - Используйте IF NOT EXISTS для безопасности
+#
+# 4. Реализуйте функцию downgrade():
+#    - Напишите SQL для отката изменений
+#    - Используйте IF EXISTS для безопасности
+#
+# 5. Зарегистрируйте миграцию в __init__.py:
+#    from .migration_XXX_your_description import upgrade as mXXX_upgrade, downgrade as mXXX_downgrade
+#    
+#    MIGRATIONS = [
+#        (1, m001_upgrade, m001_downgrade, "Initial database schema"),
+#        (XXX, mXXX_upgrade, mXXX_downgrade, "Your description"),
+#    ]
+#
+# 6. Запустите приложение - миграция применится автоматически!
+#
+# ═══════════════════════════════════════════════════════════════════════════════

@@ -43,8 +43,9 @@ def event_loop():
 async def db() -> AsyncGenerator[Database, None]:
     """In-memory SQLite database для тестов."""
     database = Database(":memory:")
-    await database.init_schema()
+    await database.init()  # Миграции применяются автоматически
     yield database
+    await database.close()
 
 
 @pytest.fixture
