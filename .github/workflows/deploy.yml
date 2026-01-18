@@ -31,7 +31,12 @@ jobs:
             git reset --hard origin/main || git reset --hard origin/master
             
             echo "⚙️ Creating .env..."
-            echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
+            cat > .env << EOF
+            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            
+            # Steam Web API ключ для резолва vanity URL
+            STEAM_API_KEY=${{ secrets.STEAM_API_KEY }}
+            EOF
             
             echo "🐳 Building and starting..."
             docker compose down || true
