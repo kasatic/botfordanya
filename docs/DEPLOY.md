@@ -145,3 +145,22 @@ docker-compose logs --tail=50
 ```bash
 cat /opt/antispam-bot/.env
 ```
+
+### Ошибка "unable to open database file"
+
+Если бот падает с ошибкой `sqlite3.OperationalError: unable to open database file`:
+
+**Причина:** Недостаточные права на директорию `data/`
+
+**Решение:**
+```bash
+cd /opt/antispam-bot
+chmod 777 data
+touch data/bot.db data/admins.txt
+chmod 666 data/bot.db data/admins.txt
+docker-compose restart
+```
+
+Эта проблема решена в новых версиях через:
+- Автоматическую подготовку в `scripts/deploy.sh`
+- Проверку прав в `docker-entrypoint.sh`

@@ -228,6 +228,12 @@ cd /opt/antispam-bot
 # Настрой .env
 cp .env.example .env && nano .env
 
+# Подготовь директорию data (важно!)
+mkdir -p data
+chmod 777 data
+touch data/bot.db data/admins.txt
+chmod 666 data/bot.db data/admins.txt
+
 # Создай SSH-ключ для GitHub
 ssh-keygen -t ed25519 -f ~/.ssh/github_actions
 cat ~/.ssh/github_actions.pub >> ~/.ssh/authorized_keys

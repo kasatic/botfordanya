@@ -29,16 +29,18 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 # Копируем только нужный код
 COPY src/ ./src/
 COPY main.py .
+COPY docker-entrypoint.sh .
 
 # Безопасность
 RUN useradd -m -s /bin/bash botuser \
     && mkdir -p /app/data \
-    && chown -R botuser:botuser /app
+    && chown -R botuser:botuser /app \
+    && chmod +x /app/docker-entrypoint.sh
 
 USER botuser
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "print('ok')" || exit 1
 
-# -OO = максимальная оптимизация (удаляет docstrings и assert)
-CMD ["python", "-OO", "main.py"]
+# Используем entrypoint для проверки прав
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

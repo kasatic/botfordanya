@@ -55,7 +55,11 @@ if [ ! -f ".env" ]; then
 fi
 
 # 7. Создание директории для данных
+echo "📁 Подготовка директории данных..."
 mkdir -p data
+chmod 777 data
+touch data/bot.db data/admins.txt
+chmod 666 data/bot.db data/admins.txt
 
 echo ""
 echo "✅ Настройка завершена!"
