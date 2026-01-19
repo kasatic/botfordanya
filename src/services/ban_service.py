@@ -7,11 +7,11 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from telegram import ChatPermissions
-from telegram.ext import ContextTypes
 from telegram.error import BadRequest
+from telegram.ext import ContextTypes
 
 from src.config import config
-from src.database import ViolationRepository, SpamRepository, BanStatsRepository
+from src.database import BanStatsRepository, SpamRepository, ViolationRepository
 
 logger = logging.getLogger(__name__)
 

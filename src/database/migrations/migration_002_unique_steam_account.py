@@ -12,8 +12,9 @@
 
 После миграции каждый Steam аккаунт может быть привязан только к одному Telegram пользователю.
 """
-import aiosqlite
 import logging
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 

@@ -77,10 +77,6 @@ class InvalidSpamType(DomainException):
 class WhitelistError(DomainException):
     """Ошибка работы с белым списком."""
 
-    pass
-
 
 class ViolationError(DomainException):
     """Ошибка работы с нарушениями."""
-
-    pass

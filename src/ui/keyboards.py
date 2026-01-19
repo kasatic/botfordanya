@@ -145,7 +145,8 @@ class Keyboards:
                 [InlineKeyboardButton(status, callback_data="ignore")],
                 [
                     InlineKeyboardButton(
-                        "🔕 Выключить" if enabled else "🔔 Включить", callback_data=f"setting_warning_{action}_{owner_id}"
+                        "🔕 Выключить" if enabled else "🔔 Включить",
+                        callback_data=f"setting_warning_{action}_{owner_id}",
                     )
                 ],
                 [InlineKeyboardButton("◀️ К настройкам", callback_data=f"menu_settings_{owner_id}")],
@@ -245,21 +246,42 @@ class Keyboards:
             buttons.append(
                 [
                     InlineKeyboardButton(f"👤 {name}", callback_data=f"user_info_{user_id}"),
-                    InlineKeyboardButton("❌", callback_data=f"whitelist_remove_{user_id}_{owner_id}" if owner_id else f"whitelist_remove_{user_id}"),
+                    InlineKeyboardButton(
+                        "❌",
+                        callback_data=(
+                            f"whitelist_remove_{user_id}_{owner_id}" if owner_id else f"whitelist_remove_{user_id}"
+                        ),
+                    ),
                 ]
             )
 
         # Кнопки навигации
         nav_buttons = []
         if page > 0:
-            nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"whitelist_page_{page-1}_{owner_id}" if owner_id else f"whitelist_page_{page-1}"))
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    "◀️ Назад",
+                    callback_data=f"whitelist_page_{page - 1}_{owner_id}" if owner_id else f"whitelist_page_{page - 1}",
+                )
+            )
         if end_idx < len(users):
-            nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"whitelist_page_{page+1}_{owner_id}" if owner_id else f"whitelist_page_{page+1}"))
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    "Вперед ▶️",
+                    callback_data=f"whitelist_page_{page + 1}_{owner_id}" if owner_id else f"whitelist_page_{page + 1}",
+                )
+            )
 
         if nav_buttons:
             buttons.append(nav_buttons)
 
-        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data=f"whitelist_add_info_{owner_id}" if owner_id else "whitelist_add_info")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "➕ Добавить", callback_data=f"whitelist_add_info_{owner_id}" if owner_id else "whitelist_add_info"
+                )
+            ]
+        )
         buttons.append(Keyboards.back_button(f"menu_main_{owner_id}" if owner_id else "menu_main"))
 
         return InlineKeyboardMarkup(buttons)

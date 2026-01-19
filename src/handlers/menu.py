@@ -3,16 +3,17 @@
 """
 
 import logging
-from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
-from telegram.error import BadRequest
 
+from telegram import Update
+from telegram.error import BadRequest
+from telegram.ext import ContextTypes
+
+from src.database import BanStatsRepository, ChatSettingsRepository, ViolationRepository, WhitelistRepository
+from src.database.steam_repository import SteamLinkRepository
+from src.services import AdminService, BanService
+from src.services.opendota_service import OpenDotaService
 from src.ui import Keyboards, Messages
 from src.ui.messages import UserInfo
-from src.services import BanService, AdminService
-from src.services.opendota_service import OpenDotaService
-from src.database import WhitelistRepository, ViolationRepository, ChatSettingsRepository, BanStatsRepository
-from src.database.steam_repository import SteamLinkRepository
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +43,10 @@ class MenuHandlers:
 
     def _extract_owner_id(self, callback_data: str) -> int | None:
         """Извлекает owner_id из callback_data.
-        
+
         Args:
             callback_data: строка вида "action_param_ownerid"
-            
+
         Returns:
             owner_id если найден, иначе None
         """
@@ -66,7 +67,9 @@ class MenuHandlers:
         """Команда /menu — главное меню."""
         user_id = update.effective_user.id
 
-        await update.message.reply_text(Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu(user_id))
+        await update.message.reply_text(
+            Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu(user_id)
+        )
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Команда /start."""
@@ -83,7 +86,7 @@ class MenuHandlers:
 
         # Извлекаем owner_id из callback_data
         owner_id = self._extract_owner_id(data)
-        
+
         # Проверка владельца меню
         if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
@@ -129,7 +132,9 @@ class MenuHandlers:
 
             elif data.startswith("menu_help"):
                 await query.edit_message_text(
-                    Messages.help_text(), parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+                    Messages.help_text(),
+                    parse_mode="Markdown",
+                    reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
                 )
 
             elif data == "ignore":
@@ -179,7 +184,7 @@ class MenuHandlers:
             try:
                 member = await context.bot.get_chat_member(chat_id, uid)
                 names[uid] = member.user.first_name
-            except:
+            except Exception:
                 names[uid] = f"ID {uid}"
 
         await query.edit_message_text(
@@ -209,7 +214,9 @@ class MenuHandlers:
 
         if is_admin:
             await query.edit_message_text(
-                Messages.settings_overview(settings), parse_mode="Markdown", reply_markup=Keyboards.settings_menu(user_id)
+                Messages.settings_overview(settings),
+                parse_mode="Markdown",
+                reply_markup=Keyboards.settings_menu(user_id),
             )
         else:
             await query.edit_message_text(
@@ -227,7 +234,7 @@ class MenuHandlers:
 
         # Извлекаем owner_id из callback_data
         owner_id = self._extract_owner_id(data)
-        
+
         # Проверка владельца меню
         if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
@@ -314,7 +321,7 @@ class MenuHandlers:
             try:
                 member = await context.bot.get_chat_member(chat_id, uid)
                 users.append((uid, member.user.first_name))
-            except:
+            except Exception:
                 users.append((uid, f"ID {uid}"))
 
         await query.edit_message_text(
@@ -332,7 +339,7 @@ class MenuHandlers:
 
         # Извлекаем owner_id из callback_data
         owner_id = self._extract_owner_id(data)
-        
+
         # Проверка владельца меню
         if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
@@ -358,7 +365,7 @@ class MenuHandlers:
             try:
                 member = await context.bot.get_chat_member(chat_id, target_id)
                 user = UserInfo(target_id, member.user.first_name)
-            except:
+            except Exception:
                 user = UserInfo(target_id, f"ID {target_id}")
 
             await query.edit_message_text(
@@ -375,7 +382,7 @@ class MenuHandlers:
             try:
                 member = await context.bot.get_chat_member(chat_id, target_id)
                 user = UserInfo(target_id, member.user.first_name)
-            except:
+            except Exception:
                 user = UserInfo(target_id, f"ID {target_id}")
 
             await query.edit_message_text(
@@ -420,7 +427,7 @@ class MenuHandlers:
 
         # Извлекаем owner_id из callback_data
         owner_id = self._extract_owner_id(data)
-        
+
         # Проверка владельца меню
         if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
@@ -447,7 +454,8 @@ class MenuHandlers:
             # Для остальных команд нужна привязка
             if not self.steam_repo or not self.opendota:
                 await query.edit_message_text(
-                    "❌ Сервис временно недоступен", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+                    "❌ Сервис временно недоступен",
+                    reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
                 )
                 return
 
@@ -477,7 +485,9 @@ class MenuHandlers:
 
             elif data.startswith("dota_unlink"):
                 await self.steam_repo.unlink(user_id)
-                await query.edit_message_text("✅ Steam отвязан!", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
+                await query.edit_message_text(
+                    "✅ Steam отвязан!", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+                )
 
         except BadRequest as e:
             if "message is not modified" not in str(e).lower():
@@ -521,7 +531,8 @@ class MenuHandlers:
 
         if not match:
             await query.edit_message_text(
-                "❌ Не удалось получить данные матча", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+                "❌ Не удалось получить данные матча",
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
             return
 
@@ -539,7 +550,7 @@ class MenuHandlers:
 
         def fmt(n):
             if n >= 1000:
-                return f"{n/1000:.1f}k"
+                return f"{n / 1000:.1f}k"
             return str(n)
 
         text = (
@@ -556,7 +567,9 @@ class MenuHandlers:
             f"\n🔗 [Подробнее](https://www.opendota.com/matches/{match['match_id']})"
         )
 
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
+        await query.edit_message_text(
+            text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+        )
 
     async def _dota_profile(self, query, context, account_id: int, user_id: int) -> None:
         """Показывает профиль игрока."""
@@ -564,7 +577,8 @@ class MenuHandlers:
 
         if not profile:
             await query.edit_message_text(
-                "❌ Не удалось загрузить профиль", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+                "❌ Не удалось загрузить профиль",
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
             return
 
@@ -645,7 +659,9 @@ class MenuHandlers:
         lines.append(f"\n📊 Всего слов: {total_words}")
 
         await query.edit_message_text(
-            "\n".join(lines), parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
         )
 
     async def _dota_shame_toggle(self, query, context, user_id: int, chat_id: int) -> None:
@@ -659,4 +675,6 @@ class MenuHandlers:
             await self.steam_repo.subscribe_shame(user_id, chat_id)
             text = "✅ *Подписка активирована!*\n\nТеперь после каждой катки бот определит самого бесполезного 😈"
 
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
+        await query.edit_message_text(
+            text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
+        )

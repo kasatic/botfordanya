@@ -8,12 +8,12 @@ import warnings
 
 # Импортируем из нового расположения
 from src.core.config import (
-    Config,
-    SpamLimits,
     BanConfig,
+    Config,
     Files,
-    get_config,
+    SpamLimits,
     config,
+    get_config,
 )
 
 warnings.warn("src.config is deprecated, use src.core.config instead", DeprecationWarning, stacklevel=2)

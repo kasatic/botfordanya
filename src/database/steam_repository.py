@@ -4,7 +4,7 @@
 
 import logging
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 from .connection import Database
 
@@ -45,26 +45,22 @@ class SteamLinkRepository:
     async def link(self, user_id: int, account_id: int, persona_name: str = None) -> bool:
         """
         Привязывает Steam аккаунт к Telegram.
-        
+
         Returns:
             True - успешно привязано
             False - account_id уже привязан к другому пользователю
         """
         async with self.db.connection() as conn:
             # Проверяем не привязан ли уже этот account_id к другому пользователю
-            cursor = await conn.execute(
-                "SELECT user_id FROM steam_links WHERE account_id = ?", 
-                (account_id,)
-            )
+            cursor = await conn.execute("SELECT user_id FROM steam_links WHERE account_id = ?", (account_id,))
             existing = await cursor.fetchone()
-            
+
             if existing and existing[0] != user_id:
                 logger.warning(
-                    f"❌ Account {account_id} already linked to user {existing[0]}, "
-                    f"cannot link to user {user_id}"
+                    f"❌ Account {account_id} already linked to user {existing[0]}, " f"cannot link to user {user_id}"
                 )
                 return False
-            
+
             # Привязываем аккаунт
             await conn.execute(
                 """
@@ -73,7 +69,7 @@ class SteamLinkRepository:
             """,
                 (user_id, account_id, persona_name, datetime.now().isoformat()),
             )
-            
+
             logger.info(f"✅ Linked account {account_id} to user {user_id}")
             return True
 

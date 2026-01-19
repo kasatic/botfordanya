@@ -1,10 +1,10 @@
 from .connection import Database
 from .repositories import (
+    BanStatsRepository,
+    ChatSettingsRepository,
     SpamRepository,
     ViolationRepository,
     WhitelistRepository,
-    ChatSettingsRepository,
-    BanStatsRepository,
 )
 from .steam_repository import SteamLinkRepository
 

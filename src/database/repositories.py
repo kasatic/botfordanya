@@ -4,7 +4,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from .connection import Database
 
@@ -291,8 +291,8 @@ class ChatSettingsRepository:
                 settings[key] = value
                 await conn.execute(
                     """
-                    INSERT INTO chat_settings 
-                    (chat_id, sticker_limit, sticker_window, text_limit, text_window, 
+                    INSERT INTO chat_settings
+                    (chat_id, sticker_limit, sticker_window, text_limit, text_window,
                      image_limit, image_window, video_limit, video_window, warning_enabled, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -345,8 +345,8 @@ class BanStatsRepository:
             # По типам
             cursor = await conn.execute(
                 """
-                SELECT ban_type, COUNT(*) as cnt 
-                FROM ban_stats 
+                SELECT ban_type, COUNT(*) as cnt
+                FROM ban_stats
                 WHERE chat_id = ? AND timestamp > ?
                 GROUP BY ban_type
                 ORDER BY cnt DESC
@@ -358,8 +358,8 @@ class BanStatsRepository:
             # Топ нарушителей за период
             cursor = await conn.execute(
                 """
-                SELECT user_id, COUNT(*) as cnt 
-                FROM ban_stats 
+                SELECT user_id, COUNT(*) as cnt
+                FROM ban_stats
                 WHERE chat_id = ? AND timestamp > ?
                 GROUP BY user_id
                 ORDER BY cnt DESC

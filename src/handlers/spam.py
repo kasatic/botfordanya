@@ -3,13 +3,14 @@
 """
 
 import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
+from src.services import AdminService, BanService, DotaService, SpamDetector
+from src.services.spam_detector import SpamType
 from src.ui import Keyboards, Messages
 from src.ui.messages import UserInfo
-from src.services import SpamDetector, BanService, AdminService, DotaService
-from src.services.spam_detector import SpamType
 
 logger = logging.getLogger(__name__)
 

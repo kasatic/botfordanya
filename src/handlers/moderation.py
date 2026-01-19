@@ -3,14 +3,15 @@
 """
 
 import logging
-from telegram import Update
-from telegram.ext import ContextTypes, CallbackQueryHandler, CommandHandler
-from telegram.error import BadRequest
 
+from telegram import Update
+from telegram.error import BadRequest
+from telegram.ext import ContextTypes
+
+from src.database import ViolationRepository, WhitelistRepository
+from src.services import AdminService, BanService
 from src.ui import Keyboards, Messages
 from src.ui.messages import UserInfo
-from src.services import BanService, AdminService
-from src.database import WhitelistRepository, ViolationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class ModerationHandlers:
         try:
             member = await context.bot.get_chat_member(chat_id, target_id)
             user = UserInfo(target_id, member.user.first_name, member.user.username)
-        except:
+        except Exception:
             user = UserInfo(target_id, f"ID {target_id}")
 
         if success:
@@ -94,7 +95,7 @@ class ModerationHandlers:
         try:
             member = await context.bot.get_chat_member(chat_id, target_id)
             user = UserInfo(target_id, member.user.first_name, member.user.username)
-        except:
+        except Exception:
             user = UserInfo(target_id, f"ID {target_id}")
 
         await query.edit_message_text(Messages.pardon_notification(user, admin_name), parse_mode="Markdown")
@@ -109,7 +110,7 @@ class ModerationHandlers:
         try:
             member = await context.bot.get_chat_member(chat_id, target_id)
             user = UserInfo(target_id, member.user.first_name, member.user.username)
-        except:
+        except Exception:
             user = UserInfo(target_id, f"ID {target_id}")
 
         await query.edit_message_text(
@@ -199,7 +200,7 @@ class ModerationHandlers:
             try:
                 member = await context.bot.get_chat_member(chat_id, uid)
                 names[uid] = member.user.first_name
-            except:
+            except Exception:
                 names[uid] = f"ID {uid}"
 
         await update.message.reply_text(

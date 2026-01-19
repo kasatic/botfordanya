@@ -9,8 +9,8 @@ Dependency Injection Container для управления зависимост�
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional, TypeVar, Type
 from enum import Enum
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
 
 logger = logging.getLogger(__name__)
 

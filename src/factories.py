@@ -6,28 +6,28 @@
 """
 
 import logging
-from typing import Optional
+
 from telegram.ext import Application
 
-from src.core.config import config
 from src.container import ServiceContainer
+from src.core.config import config
 from src.database import (
+    BanStatsRepository,
+    ChatSettingsRepository,
     Database,
     SpamRepository,
+    SteamLinkRepository,
     ViolationRepository,
     WhitelistRepository,
-    ChatSettingsRepository,
-    BanStatsRepository,
-    SteamLinkRepository,
 )
 from src.services import (
-    SpamDetector,
-    BanService,
     AdminService,
+    BanService,
+    DatabaseCleanupService,
     DotaService,
     OpenDotaService,
     ShameService,
-    DatabaseCleanupService,
+    SpamDetector,
 )
 
 logger = logging.getLogger(__name__)

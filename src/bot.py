@@ -2,30 +2,30 @@
 Главный модуль бота с graceful shutdown и Dependency Injection.
 """
 
+import asyncio
 import logging
 import signal
-import asyncio
-from telegram import BotCommand
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
-from src.core.config import config
+from telegram import BotCommand
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler
+
 from src.container import ServiceContainer
-from src.factories import ContainerFactory
+from src.core.config import config
 from src.database import (
+    BanStatsRepository,
+    ChatSettingsRepository,
     Database,
-    SpamRepository,
+    SteamLinkRepository,
     ViolationRepository,
     WhitelistRepository,
-    ChatSettingsRepository,
-    BanStatsRepository,
-    SteamLinkRepository,
 )
-from src.services import SpamDetector, BanService, AdminService, DotaService
+from src.factories import ContainerFactory
+from src.handlers import MenuHandlers, ModerationHandlers, register_spam_handlers
+from src.handlers.dota import DotaHandlers
+from src.services import AdminService, BanService, DotaService, SpamDetector
+from src.services.database_cleanup import DatabaseCleanupService
 from src.services.opendota_service import OpenDotaService
 from src.services.shame_service import ShameService
-from src.services.database_cleanup import DatabaseCleanupService
-from src.handlers import register_spam_handlers, MenuHandlers, ModerationHandlers
-from src.handlers.dota import DotaHandlers
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 async def error_handler(update, context):
     """Глобальный обработчик ошибок."""
-    logger.error(f"Exception while handling an update:", exc_info=context.error)
+    logger.error("Exception while handling an update:", exc_info=context.error)
 
     # Логируем информацию об update если доступна
     if update:

@@ -2,12 +2,13 @@
 Асинхронное подключение к SQLite через aiosqlite.
 """
 
-import logging
 import asyncio
-import aiosqlite
-from pathlib import Path
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator, Optional
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,8 @@ class Database:
             raise RuntimeError("Database not initialized. Call init() first.")
 
         # Импортируем здесь, чтобы избежать циклических импортов
-        from .migrations_manager import MigrationManager
         from .migrations import get_migrations
+        from .migrations_manager import MigrationManager
 
         logger.info("🔄 Starting database migration...")
         migration_manager = MigrationManager(self._conn)

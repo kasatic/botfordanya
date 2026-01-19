@@ -3,11 +3,12 @@
 """
 
 import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.services.opendota_service import OpenDotaService
 from src.database.steam_repository import SteamLinkRepository
+from src.services.opendota_service import OpenDotaService
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class DotaHandlers:
         # Удаляем команду чтобы ID не светился в чате
         try:
             await update.message.delete()
-        except:
+        except Exception:
             pass
 
         if not context.args:
@@ -61,7 +62,7 @@ class DotaHandlers:
                 processing_msg = await context.bot.send_message(
                     chat_id=user_id, text="🔍 Ищу профиль по кастомному URL..."
                 )
-            except:
+            except Exception:
                 pass
 
         # Используем новый умный парсер
@@ -71,7 +72,7 @@ class DotaHandlers:
         if processing_msg:
             try:
                 await processing_msg.delete()
-            except:
+            except Exception:
                 pass
 
         if not account_id:
@@ -116,7 +117,7 @@ class DotaHandlers:
 
         # Сохраняем
         success = await self.steam_repo.link(user_id, account_id, profile.persona_name)
-        
+
         if not success:
             await context.bot.send_message(
                 chat_id=user_id,
@@ -162,8 +163,6 @@ class DotaHandlers:
         /game [@user] — проверить в игре ли человек.
         Без аргумента — проверяет себя.
         """
-        chat_id = update.effective_chat.id
-
         # Определяем кого чекаем
         if update.message.reply_to_message:
             target_user = update.message.reply_to_message.from_user
@@ -324,7 +323,7 @@ class DotaHandlers:
         # Форматируем числа
         def fmt(n):
             if n >= 1000:
-                return f"{n/1000:.1f}k"
+                return f"{n / 1000:.1f}k"
             return str(n)
 
         text = (

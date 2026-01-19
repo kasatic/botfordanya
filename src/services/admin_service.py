@@ -6,9 +6,8 @@ import logging
 from pathlib import Path
 from typing import List, Set
 
-from telegram import Update
+from telegram.error import NetworkError, TelegramError
 from telegram.ext import ContextTypes
-from telegram.error import TelegramError, NetworkError
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class AdminService:
 
         path = Path(self.admin_file)
         if not path.exists():
-            logger.warning(f"Admin file not found at configured path")
+            logger.warning("Admin file not found at configured path")
             return 0
 
         try:

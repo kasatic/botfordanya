@@ -5,9 +5,9 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from src.database import SpamRepository, WhitelistRepository, ChatSettingsRepository
+from src.database import ChatSettingsRepository, SpamRepository, WhitelistRepository
 
 logger = logging.getLogger(__name__)
 

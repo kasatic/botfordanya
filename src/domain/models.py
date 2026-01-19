@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from .enums import SpamType, BanLevel
+from .enums import BanLevel, SpamType
 
 
 @dataclass(frozen=True, slots=True)

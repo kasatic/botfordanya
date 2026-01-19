@@ -3,8 +3,8 @@
 """
 
 import logging
-from typing import List, Tuple, Callable, Awaitable
-from pathlib import Path
+from typing import Awaitable, Callable, List, Tuple
+
 import aiosqlite
 
 logger = logging.getLogger(__name__)

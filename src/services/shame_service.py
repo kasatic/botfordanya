@@ -2,16 +2,16 @@
 Сервис для отслеживания матчей и shame уведомлений.
 """
 
-import logging
 import asyncio
+import logging
 import random
-from typing import Dict, List, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 from telegram.ext import Application
 
-from src.services.opendota_service import OpenDotaService
 from src.database.steam_repository import SteamLinkRepository
+from src.services.opendota_service import OpenDotaService
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ class ShameService:
         # Форматируем урон
         def fmt(n):
             if n >= 1000:
-                return f"{n/1000:.1f}k"
+                return f"{n / 1000:.1f}k"
             return str(n)
 
         text = (

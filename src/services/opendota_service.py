@@ -2,15 +2,16 @@
 Сервис для работы с OpenDota API.
 """
 
-import logging
 import asyncio
-import aiohttp
+import logging
 import traceback
-from typing import Optional, Dict, Any, Callable, TypeVar
-from dataclasses import dataclass
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
+from typing import Any, Callable, Dict, Optional, TypeVar
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -194,10 +195,10 @@ class OpenDotaService:
         """
         # Валидация endpoint
         if not endpoint.startswith("/"):
-            logger.error(f"Invalid endpoint: must start with /")
+            logger.error("Invalid endpoint: must start with /")
             return None
         if ".." in endpoint or "//" in endpoint:
-            logger.error(f"Invalid endpoint: contains suspicious patterns")
+            logger.error("Invalid endpoint: contains suspicious patterns")
             return None
 
         # Проверяем rate limit ПЕРЕД запросом
@@ -368,7 +369,7 @@ class OpenDotaService:
         def get_rank(value, sorted_list):
             try:
                 return sorted_list.index(value) + 1
-            except:
+            except Exception:
                 return 5
 
         return {
@@ -612,7 +613,7 @@ class OpenDotaService:
             except Exception as e:
                 logger.warning(f"Failed to resolve via Steam API: {e}")
         else:
-            logger.warning(f"Steam API key not configured, falling back to OpenDota search")
+            logger.warning("Steam API key not configured, falling back to OpenDota search")
 
         # Способ 2: OpenDota поиск (ПРИБЛИЗИТЕЛЬНЫЙ - ищет по имени профиля)
         try:
