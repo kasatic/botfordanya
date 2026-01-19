@@ -115,7 +115,22 @@ class DotaHandlers:
             return
 
         # Сохраняем
-        await self.steam_repo.link(user_id, account_id, profile.persona_name)
+        success = await self.steam_repo.link(user_id, account_id, profile.persona_name)
+        
+        if not success:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"❌ *Этот Steam аккаунт уже привязан к другому пользователю*\n\n"
+                    f"👤 {profile.persona_name}\n"
+                    f"🆔 `{account_id}`\n\n"
+                    f"Каждый Steam аккаунт может быть привязан только к одному Telegram пользователю.\n\n"
+                    f"Если это твой аккаунт и он привязан к другому Telegram, "
+                    f"попроси администратора помочь с отвязкой."
+                ),
+                parse_mode="Markdown",
+            )
+            return
 
         await context.bot.send_message(
             chat_id=user_id,

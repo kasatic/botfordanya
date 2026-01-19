@@ -5,7 +5,7 @@
 import logging
 import asyncio
 import random
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from telegram.ext import Application
@@ -62,7 +62,6 @@ class ShameService:
         self.application = application
         self._running = False
         self._task: Optional[asyncio.Task] = None
-        self._processed_matches: Dict[int, Set[int]] = {}  # Кэш обработанных матчей per-chat: {chat_id: {match_ids}}
 
     async def start(self) -> None:
         """Запускает фоновую проверку матчей."""
@@ -118,24 +117,26 @@ class ShameService:
         match_players: Dict[int, List[tuple]] = {}
 
         for user_id, account_id, last_match_id in subscribers:
-            current_match = await self.opendota.get_recent_match_id(account_id)
+            try:
+                # Получаем ID последнего матча из OpenDota API
+                current_match = await self.opendota.get_recent_match_id(account_id)
 
-            if not current_match:
-                continue
+                if not current_match:
+                    continue
 
-            # Пропускаем если матч уже обработан или не изменился
-            if current_match == last_match_id:
-                continue
+                # Проверяем по БД, а не по кэшу - БД является единственным источником истины
+                if current_match == last_match_id:
+                    logger.debug(f"Match {current_match} already processed for user {user_id}")
+                    continue
 
-            if current_match in self._processed_matches.get(chat_id, set()):
-                # Обновляем last_match но не постим повторно
-                await self.steam_repo.update_last_match(user_id, chat_id, current_match)
-                continue
+                # Группируем игроков по матчам
+                if current_match not in match_players:
+                    match_players[current_match] = []
 
-            if current_match not in match_players:
-                match_players[current_match] = []
+                match_players[current_match].append((user_id, account_id))
 
-            match_players[current_match].append((user_id, account_id))
+            except Exception as e:
+                logger.error(f"Error checking user {user_id}: {e}")
 
         # Обрабатываем каждый новый матч
         for match_id, players in match_players.items():
@@ -168,16 +169,9 @@ class ShameService:
         if not worst_user_id:
             return
 
-        # Обновляем last_match для всех участников
+        # Обновляем last_match_id в БД для всех участников
         for user_id, _ in players:
             await self.steam_repo.update_last_match(user_id, chat_id, match_id)
-
-        # Добавляем в кэш обработанных для этого чата
-        self._processed_matches.setdefault(chat_id, set()).add(match_id)
-        # Чистим старые (держим последние 100 для каждого чата)
-        if len(self._processed_matches.get(chat_id, set())) > 100:
-            chat_matches = self._processed_matches[chat_id]
-            self._processed_matches[chat_id] = set(list(chat_matches)[-50:])
 
         # Отправляем shame сообщение
         await self._send_shame(chat_id, worst_user_id, worst, match_data)

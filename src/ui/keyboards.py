@@ -13,66 +13,66 @@ class Keyboards:
     # ═══════════════════════════════════════════════════════════
 
     @staticmethod
-    def main_menu() -> InlineKeyboardMarkup:
+    def main_menu(owner_id: int) -> InlineKeyboardMarkup:
         """Главное меню бота."""
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("📊 Моя статистика", callback_data="menu_stats"),
-                    InlineKeyboardButton("🏆 Топ", callback_data="menu_top"),
+                    InlineKeyboardButton("📊 Моя статистика", callback_data=f"menu_stats_{owner_id}"),
+                    InlineKeyboardButton("🏆 Топ", callback_data=f"menu_top_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("📈 Статистика чата", callback_data="menu_chatstats"),
-                    InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings"),
+                    InlineKeyboardButton("📈 Статистика чата", callback_data=f"menu_chatstats_{owner_id}"),
+                    InlineKeyboardButton("⚙️ Настройки", callback_data=f"menu_settings_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("🎮 Dota 2", callback_data="menu_dota"),
-                    InlineKeyboardButton("🤍 Белый список", callback_data="menu_whitelist"),
+                    InlineKeyboardButton("🎮 Dota 2", callback_data=f"menu_dota_{owner_id}"),
+                    InlineKeyboardButton("🤍 Белый список", callback_data=f"menu_whitelist_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("❓ Помощь", callback_data="menu_help"),
+                    InlineKeyboardButton("❓ Помощь", callback_data=f"menu_help_{owner_id}"),
                 ],
             ]
         )
 
     @staticmethod
-    def dota_menu(is_linked: bool = False, is_shame_subscribed: bool = False) -> InlineKeyboardMarkup:
+    def dota_menu(owner_id: int, is_linked: bool = False, is_shame_subscribed: bool = False) -> InlineKeyboardMarkup:
         """Меню Dota 2."""
         buttons = []
 
         if is_linked:
             buttons.append(
                 [
-                    InlineKeyboardButton("🎮 В игре?", callback_data="dota_game"),
-                    InlineKeyboardButton("📊 Последний матч", callback_data="dota_last"),
+                    InlineKeyboardButton("🎮 В игре?", callback_data=f"dota_game_{owner_id}"),
+                    InlineKeyboardButton("📊 Последний матч", callback_data=f"dota_last_{owner_id}"),
                 ]
             )
             buttons.append(
                 [
-                    InlineKeyboardButton("👤 Мой профиль", callback_data="dota_profile"),
-                    InlineKeyboardButton("☢️ Токсичность", callback_data="dota_toxic"),
+                    InlineKeyboardButton("👤 Мой профиль", callback_data=f"dota_profile_{owner_id}"),
+                    InlineKeyboardButton("☢️ Токсичность", callback_data=f"dota_toxic_{owner_id}"),
                 ]
             )
 
             shame_text = "😈 Позор: ВКЛ" if is_shame_subscribed else "😇 Позор: ВЫКЛ"
             buttons.append(
                 [
-                    InlineKeyboardButton(shame_text, callback_data="dota_shame_toggle"),
+                    InlineKeyboardButton(shame_text, callback_data=f"dota_shame_toggle_{owner_id}"),
                 ]
             )
             buttons.append(
                 [
-                    InlineKeyboardButton("🔗 Отвязать Steam", callback_data="dota_unlink"),
+                    InlineKeyboardButton("🔗 Отвязать Steam", callback_data=f"dota_unlink_{owner_id}"),
                 ]
             )
         else:
             buttons.append(
                 [
-                    InlineKeyboardButton("🔗 Привязать Steam", callback_data="dota_link_info"),
+                    InlineKeyboardButton("🔗 Привязать Steam", callback_data=f"dota_link_info_{owner_id}"),
                 ]
             )
 
-        buttons.append(Keyboards.back_button())
+        buttons.append(Keyboards.back_button(f"menu_main_{owner_id}"))
         return InlineKeyboardMarkup(buttons)
 
     @staticmethod
@@ -82,6 +82,7 @@ class Keyboards:
 
         Args:
             callback: callback_data для кнопки (по умолчанию "menu_main")
+                     Может содержать owner_id в формате "menu_main_123456"
             as_markup: если True, возвращает InlineKeyboardMarkup, иначе list
 
         Returns:
@@ -95,47 +96,47 @@ class Keyboards:
     # ═══════════════════════════════════════════════════════════
 
     @staticmethod
-    def settings_menu() -> InlineKeyboardMarkup:
+    def settings_menu(owner_id: int) -> InlineKeyboardMarkup:
         """Меню настроек."""
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("🎭 Стикеры/GIF", callback_data="settings_sticker"),
-                    InlineKeyboardButton("💬 Текст", callback_data="settings_text"),
+                    InlineKeyboardButton("🎭 Стикеры/GIF", callback_data=f"settings_sticker_{owner_id}"),
+                    InlineKeyboardButton("💬 Текст", callback_data=f"settings_text_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("🖼 Картинки", callback_data="settings_image"),
-                    InlineKeyboardButton("🎥 Видео", callback_data="settings_video"),
+                    InlineKeyboardButton("🖼 Картинки", callback_data=f"settings_image_{owner_id}"),
+                    InlineKeyboardButton("🎥 Видео", callback_data=f"settings_video_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("⚠️ Предупреждения", callback_data="settings_warning"),
+                    InlineKeyboardButton("⚠️ Предупреждения", callback_data=f"settings_warning_{owner_id}"),
                 ],
-                Keyboards.back_button(),
+                Keyboards.back_button(f"menu_main_{owner_id}"),
             ]
         )
 
     @staticmethod
-    def setting_adjust(setting_type: str, current_limit: int) -> InlineKeyboardMarkup:
+    def setting_adjust(setting_type: str, current_limit: int, owner_id: int) -> InlineKeyboardMarkup:
         """Кнопки изменения лимита."""
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("➖", callback_data=f"setting_{setting_type}_dec"),
+                    InlineKeyboardButton("➖", callback_data=f"setting_{setting_type}_dec_{owner_id}"),
                     InlineKeyboardButton(f"📊 {current_limit}", callback_data="ignore"),
-                    InlineKeyboardButton("➕", callback_data=f"setting_{setting_type}_inc"),
+                    InlineKeyboardButton("➕", callback_data=f"setting_{setting_type}_inc_{owner_id}"),
                 ],
                 [
-                    InlineKeyboardButton("1️⃣", callback_data=f"setting_{setting_type}_1"),
-                    InlineKeyboardButton("3️⃣", callback_data=f"setting_{setting_type}_3"),
-                    InlineKeyboardButton("5️⃣", callback_data=f"setting_{setting_type}_5"),
-                    InlineKeyboardButton("🔟", callback_data=f"setting_{setting_type}_10"),
+                    InlineKeyboardButton("1️⃣", callback_data=f"setting_{setting_type}_1_{owner_id}"),
+                    InlineKeyboardButton("3️⃣", callback_data=f"setting_{setting_type}_3_{owner_id}"),
+                    InlineKeyboardButton("5️⃣", callback_data=f"setting_{setting_type}_5_{owner_id}"),
+                    InlineKeyboardButton("🔟", callback_data=f"setting_{setting_type}_10_{owner_id}"),
                 ],
-                [InlineKeyboardButton("◀️ К настройкам", callback_data="menu_settings")],
+                [InlineKeyboardButton("◀️ К настройкам", callback_data=f"menu_settings_{owner_id}")],
             ]
         )
 
     @staticmethod
-    def warning_toggle(enabled: bool) -> InlineKeyboardMarkup:
+    def warning_toggle(enabled: bool, owner_id: int) -> InlineKeyboardMarkup:
         """Переключатель предупреждений."""
         status = "✅ Включены" if enabled else "❌ Выключены"
         action = "off" if enabled else "on"
@@ -144,10 +145,10 @@ class Keyboards:
                 [InlineKeyboardButton(status, callback_data="ignore")],
                 [
                     InlineKeyboardButton(
-                        "🔕 Выключить" if enabled else "🔔 Включить", callback_data=f"setting_warning_{action}"
+                        "🔕 Выключить" if enabled else "🔔 Включить", callback_data=f"setting_warning_{action}_{owner_id}"
                     )
                 ],
-                [InlineKeyboardButton("◀️ К настройкам", callback_data="menu_settings")],
+                [InlineKeyboardButton("◀️ К настройкам", callback_data=f"menu_settings_{owner_id}")],
             ]
         )
 
@@ -230,7 +231,7 @@ class Keyboards:
     # ═══════════════════════════════════════════════════════════
 
     @staticmethod
-    def whitelist_menu(users: list, page: int = 0) -> InlineKeyboardMarkup:
+    def whitelist_menu(users: list, page: int = 0, owner_id: int = None) -> InlineKeyboardMarkup:
         """Меню белого списка с пагинацией."""
         buttons = []
 
@@ -244,22 +245,22 @@ class Keyboards:
             buttons.append(
                 [
                     InlineKeyboardButton(f"👤 {name}", callback_data=f"user_info_{user_id}"),
-                    InlineKeyboardButton("❌", callback_data=f"whitelist_remove_{user_id}"),
+                    InlineKeyboardButton("❌", callback_data=f"whitelist_remove_{user_id}_{owner_id}" if owner_id else f"whitelist_remove_{user_id}"),
                 ]
             )
 
         # Кнопки навигации
         nav_buttons = []
         if page > 0:
-            nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"whitelist_page_{page-1}"))
+            nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"whitelist_page_{page-1}_{owner_id}" if owner_id else f"whitelist_page_{page-1}"))
         if end_idx < len(users):
-            nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"whitelist_page_{page+1}"))
+            nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"whitelist_page_{page+1}_{owner_id}" if owner_id else f"whitelist_page_{page+1}"))
 
         if nav_buttons:
             buttons.append(nav_buttons)
 
-        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data="whitelist_add_info")])
-        buttons.append(Keyboards.back_button())
+        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data=f"whitelist_add_info_{owner_id}" if owner_id else "whitelist_add_info")])
+        buttons.append(Keyboards.back_button(f"menu_main_{owner_id}" if owner_id else "menu_main"))
 
         return InlineKeyboardMarkup(buttons)
 
@@ -268,16 +269,16 @@ class Keyboards:
     # ═══════════════════════════════════════════════════════════
 
     @staticmethod
-    def stats_period() -> InlineKeyboardMarkup:
+    def stats_period(owner_id: int) -> InlineKeyboardMarkup:
         """Выбор периода статистики."""
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("📅 Сегодня", callback_data="chatstats_1"),
-                    InlineKeyboardButton("📆 Неделя", callback_data="chatstats_7"),
-                    InlineKeyboardButton("🗓 Месяц", callback_data="chatstats_30"),
+                    InlineKeyboardButton("📅 Сегодня", callback_data=f"chatstats_1_{owner_id}"),
+                    InlineKeyboardButton("📆 Неделя", callback_data=f"chatstats_7_{owner_id}"),
+                    InlineKeyboardButton("🗓 Месяц", callback_data=f"chatstats_30_{owner_id}"),
                 ],
-                Keyboards.back_button(),
+                Keyboards.back_button(f"menu_main_{owner_id}"),
             ]
         )
 

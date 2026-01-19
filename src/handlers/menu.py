@@ -40,6 +40,24 @@ class MenuHandlers:
         self.steam_repo = steam_repo
         self.opendota = opendota
 
+    def _extract_owner_id(self, callback_data: str) -> int | None:
+        """Извлекает owner_id из callback_data.
+        
+        Args:
+            callback_data: строка вида "action_param_ownerid"
+            
+        Returns:
+            owner_id если найден, иначе None
+        """
+        try:
+            parts = callback_data.split("_")
+            # Последняя часть должна быть числом (owner_id)
+            if parts and parts[-1].isdigit():
+                return int(parts[-1])
+        except Exception:
+            pass
+        return None
+
     # ═══════════════════════════════════════════════════════════
     # 🏠 ГЛАВНОЕ МЕНЮ
     # ═══════════════════════════════════════════════════════════
@@ -47,10 +65,8 @@ class MenuHandlers:
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Команда /menu — главное меню."""
         user_id = update.effective_user.id
-        # Сохраняем владельца меню
-        context.user_data["menu_owner"] = user_id
 
-        await update.message.reply_text(Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu())
+        await update.message.reply_text(Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu(user_id))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Команда /start."""
@@ -65,51 +81,55 @@ class MenuHandlers:
         chat_id = update.effective_chat.id
         user_id = update.effective_user.id
 
+        # Извлекаем owner_id из callback_data
+        owner_id = self._extract_owner_id(data)
+        
         # Проверка владельца меню
-        menu_owner = context.user_data.get("menu_owner")
-        if menu_owner and menu_owner != user_id:
+        if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
             return
 
         try:
-            if data == "menu_main":
+            if data.startswith("menu_main"):
                 await query.edit_message_text(
-                    Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu()
+                    Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu(user_id)
                 )
 
-            elif data == "menu_stats":
+            elif data.startswith("menu_stats"):
                 await self._show_user_stats(query, context, user_id, chat_id)
 
-            elif data == "menu_top":
-                await self._show_top(query, context, chat_id)
+            elif data.startswith("menu_top"):
+                await self._show_top(query, context, chat_id, user_id)
 
-            elif data == "menu_chatstats":
+            elif data.startswith("menu_chatstats"):
                 await query.edit_message_text(
                     "📈 *Статистика чата*\n\nВыбери период:",
                     parse_mode="Markdown",
-                    reply_markup=Keyboards.stats_period(),
+                    reply_markup=Keyboards.stats_period(user_id),
                 )
 
             elif data.startswith("chatstats_"):
-                days = int(data.split("_")[1])
-                await self._show_chat_stats(query, context, chat_id, days)
+                parts = data.split("_")
+                days = int(parts[1])
+                await self._show_chat_stats(query, context, chat_id, days, user_id)
 
-            elif data == "menu_settings":
+            elif data.startswith("menu_settings"):
                 await self._show_settings(query, context, chat_id, user_id)
 
-            elif data == "menu_whitelist":
-                await self._show_whitelist(query, context, chat_id)
+            elif data.startswith("menu_whitelist"):
+                await self._show_whitelist(query, context, chat_id, user_id)
 
             elif data.startswith("whitelist_page_"):
-                page = int(data.split("_")[2])
-                await self._show_whitelist(query, context, chat_id, page=page)
+                parts = data.split("_")
+                page = int(parts[2])
+                await self._show_whitelist(query, context, chat_id, user_id, page=page)
 
-            elif data == "menu_dota":
+            elif data.startswith("menu_dota"):
                 await self._show_dota_menu(query, context, user_id)
 
-            elif data == "menu_help":
+            elif data.startswith("menu_help"):
                 await query.edit_message_text(
-                    Messages.help_text(), parse_mode="Markdown", reply_markup=Keyboards.back_button(as_markup=True)
+                    Messages.help_text(), parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
                 )
 
             elif data == "ignore":
@@ -123,7 +143,7 @@ class MenuHandlers:
                 # Сообщение было удалено или недоступно - отправляем новое
                 try:
                     await query.message.reply_text(
-                        Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu()
+                        Messages.welcome(), parse_mode="Markdown", reply_markup=Keyboards.main_menu(user_id)
                     )
                 except Exception as send_error:
                     logger.error(f"Failed to send new message: {send_error}")
@@ -146,34 +166,34 @@ class MenuHandlers:
         await query.edit_message_text(
             Messages.user_stats(user, violations, is_banned, remaining, is_whitelisted),
             parse_mode="Markdown",
-            reply_markup=Keyboards.back_button(as_markup=True),
+            reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
         )
 
-    async def _show_top(self, query, context, chat_id: int) -> None:
+    async def _show_top(self, query, context, chat_id: int, user_id: int) -> None:
         """Показывает топ нарушителей."""
         top_list = await self.violation_repo.get_top(chat_id, 10)
 
         # Получаем имена
         names = {}
-        for user_id, _ in top_list:
+        for uid, _ in top_list:
             try:
-                member = await context.bot.get_chat_member(chat_id, user_id)
-                names[user_id] = member.user.first_name
+                member = await context.bot.get_chat_member(chat_id, uid)
+                names[uid] = member.user.first_name
             except:
-                names[user_id] = f"ID {user_id}"
+                names[uid] = f"ID {uid}"
 
         await query.edit_message_text(
             Messages.top_violators(top_list, names),
             parse_mode="Markdown",
-            reply_markup=Keyboards.back_button(as_markup=True),
+            reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
         )
 
-    async def _show_chat_stats(self, query, context, chat_id: int, days: int) -> None:
+    async def _show_chat_stats(self, query, context, chat_id: int, days: int, user_id: int) -> None:
         """Показывает статистику чата."""
         stats = await self.stats_repo.get_stats(chat_id, days)
 
         await query.edit_message_text(
-            Messages.chat_stats(stats, days), parse_mode="Markdown", reply_markup=Keyboards.stats_period()
+            Messages.chat_stats(stats, days), parse_mode="Markdown", reply_markup=Keyboards.stats_period(user_id)
         )
 
     # ═══════════════════════════════════════════════════════════
@@ -189,13 +209,13 @@ class MenuHandlers:
 
         if is_admin:
             await query.edit_message_text(
-                Messages.settings_overview(settings), parse_mode="Markdown", reply_markup=Keyboards.settings_menu()
+                Messages.settings_overview(settings), parse_mode="Markdown", reply_markup=Keyboards.settings_menu(user_id)
             )
         else:
             await query.edit_message_text(
                 Messages.settings_overview(settings) + "\n\n_Только админы могут менять настройки_",
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
 
     async def handle_settings_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -205,9 +225,11 @@ class MenuHandlers:
         user_id = update.effective_user.id
         data = query.data
 
+        # Извлекаем owner_id из callback_data
+        owner_id = self._extract_owner_id(data)
+        
         # Проверка владельца меню
-        menu_owner = context.user_data.get("menu_owner")
-        if menu_owner and menu_owner != user_id:
+        if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
             return
 
@@ -222,14 +244,15 @@ class MenuHandlers:
 
         try:
             if data.startswith("settings_"):
-                setting_type = data.split("_")[1]
+                parts = data.split("_")
+                setting_type = parts[1]
 
                 if setting_type == "warning":
                     enabled = settings.get("warning_enabled", True)
                     await query.edit_message_text(
                         "⚠️ *Предупреждения*\n\n" "_Показывать предупреждение перед баном?_",
                         parse_mode="Markdown",
-                        reply_markup=Keyboards.warning_toggle(enabled),
+                        reply_markup=Keyboards.warning_toggle(enabled, user_id),
                     )
                 else:
                     limit_key = f"{setting_type}_limit"
@@ -237,7 +260,7 @@ class MenuHandlers:
                     await query.edit_message_text(
                         Messages.setting_detail(setting_type, settings[limit_key], settings[window_key]),
                         parse_mode="Markdown",
-                        reply_markup=Keyboards.setting_adjust(setting_type, settings[limit_key]),
+                        reply_markup=Keyboards.setting_adjust(setting_type, settings[limit_key], user_id),
                     )
 
             elif data.startswith("setting_"):
@@ -251,7 +274,7 @@ class MenuHandlers:
                     await query.edit_message_text(
                         "⚠️ *Предупреждения*\n\n" f"{'✅ Включены!' if new_value else '❌ Выключены!'}",
                         parse_mode="Markdown",
-                        reply_markup=Keyboards.warning_toggle(bool(new_value)),
+                        reply_markup=Keyboards.warning_toggle(bool(new_value), user_id),
                     )
                 else:
                     limit_key = f"{setting_type}_limit"
@@ -270,7 +293,7 @@ class MenuHandlers:
                     await query.edit_message_text(
                         Messages.setting_detail(setting_type, new_value, settings[f"{setting_type}_window"]),
                         parse_mode="Markdown",
-                        reply_markup=Keyboards.setting_adjust(setting_type, new_value),
+                        reply_markup=Keyboards.setting_adjust(setting_type, new_value, user_id),
                     )
 
         except BadRequest as e:
@@ -281,23 +304,23 @@ class MenuHandlers:
     # 🤍 БЕЛЫЙ СПИСОК
     # ═══════════════════════════════════════════════════════════
 
-    async def _show_whitelist(self, query, context, chat_id: int, page: int = 0) -> None:
+    async def _show_whitelist(self, query, context, chat_id: int, user_id: int, page: int = 0) -> None:
         """Показывает белый список с пагинацией."""
         wl = await self.whitelist_repo.get_all(chat_id)
 
         # Получаем имена
         users = []
-        for user_id, _ in wl:
+        for uid, _ in wl:
             try:
-                member = await context.bot.get_chat_member(chat_id, user_id)
-                users.append((user_id, member.user.first_name))
+                member = await context.bot.get_chat_member(chat_id, uid)
+                users.append((uid, member.user.first_name))
             except:
-                users.append((user_id, f"ID {user_id}"))
+                users.append((uid, f"ID {uid}"))
 
         await query.edit_message_text(
             Messages.whitelist_view(len(users)),
             parse_mode="Markdown",
-            reply_markup=Keyboards.whitelist_menu(users, page),
+            reply_markup=Keyboards.whitelist_menu(users, page, user_id),
         )
 
     async def handle_whitelist_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -307,7 +330,15 @@ class MenuHandlers:
         user_id = update.effective_user.id
         data = query.data
 
-        if data == "whitelist_add_info":
+        # Извлекаем owner_id из callback_data
+        owner_id = self._extract_owner_id(data)
+        
+        # Проверка владельца меню
+        if owner_id and owner_id != user_id:
+            await query.answer("❌ Это не твоё меню!", show_alert=True)
+            return
+
+        if data.startswith("whitelist_add_info"):
             await query.answer("Ответь на сообщение пользователя командой /trust", show_alert=True)
             return
 
@@ -320,7 +351,8 @@ class MenuHandlers:
         await query.answer()
 
         if data.startswith("whitelist_add_"):
-            target_id = int(data.split("_")[2])
+            parts = data.split("_")
+            target_id = int(parts[2])
             await self.whitelist_repo.add(target_id, chat_id, user_id)
 
             try:
@@ -332,11 +364,12 @@ class MenuHandlers:
             await query.edit_message_text(
                 Messages.whitelist_added(user),
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
 
         elif data.startswith("whitelist_remove_"):
-            target_id = int(data.split("_")[2])
+            parts = data.split("_")
+            target_id = int(parts[2])
             await self.whitelist_repo.remove(target_id, chat_id)
 
             try:
@@ -348,7 +381,7 @@ class MenuHandlers:
             await query.edit_message_text(
                 Messages.whitelist_removed(user),
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
 
     # ═══════════════════════════════════════════════════════════
@@ -375,7 +408,7 @@ class MenuHandlers:
             text += "❌ Steam не привязан\n\nПривяжи аккаунт чтобы использовать функции:"
 
         await query.edit_message_text(
-            text, parse_mode="Markdown", reply_markup=Keyboards.dota_menu(is_linked, is_shame_subscribed)
+            text, parse_mode="Markdown", reply_markup=Keyboards.dota_menu(user_id, is_linked, is_shame_subscribed)
         )
 
     async def handle_dota_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -385,16 +418,18 @@ class MenuHandlers:
         chat_id = update.effective_chat.id
         data = query.data
 
+        # Извлекаем owner_id из callback_data
+        owner_id = self._extract_owner_id(data)
+        
         # Проверка владельца меню
-        menu_owner = context.user_data.get("menu_owner")
-        if menu_owner and menu_owner != user_id:
+        if owner_id and owner_id != user_id:
             await query.answer("❌ Это не твоё меню!", show_alert=True)
             return
 
         await query.answer()
 
         try:
-            if data == "dota_link_info":
+            if data.startswith("dota_link_info"):
                 await query.edit_message_text(
                     "🔗 *Как привязать Steam:*\n\n"
                     "Напиши мне в ЛС команду:\n"
@@ -405,14 +440,14 @@ class MenuHandlers:
                     "• `/link https://dotabuff.com/players/123456789`\n"
                     "• `/link https://steamcommunity.com/id/nickname`",
                     parse_mode="Markdown",
-                    reply_markup=Keyboards.back_button(as_markup=True),
+                    reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
                 )
                 return
 
             # Для остальных команд нужна привязка
             if not self.steam_repo or not self.opendota:
                 await query.edit_message_text(
-                    "❌ Сервис временно недоступен", reply_markup=Keyboards.back_button(as_markup=True)
+                    "❌ Сервис временно недоступен", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
                 )
                 return
 
@@ -421,28 +456,28 @@ class MenuHandlers:
             if not account_id:
                 await query.edit_message_text(
                     "❌ Сначала привяжи Steam!\n" "Напиши мне в ЛС: /link",
-                    reply_markup=Keyboards.back_button(as_markup=True),
+                    reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
                 )
                 return
 
-            if data == "dota_game":
+            if data.startswith("dota_game"):
                 await self._dota_check_game(query, context, user_id, account_id)
 
-            elif data == "dota_last":
+            elif data.startswith("dota_last"):
                 await self._dota_last_match(query, context, user_id, account_id)
 
-            elif data == "dota_profile":
-                await self._dota_profile(query, context, account_id)
+            elif data.startswith("dota_profile"):
+                await self._dota_profile(query, context, account_id, user_id)
 
-            elif data == "dota_toxic":
+            elif data.startswith("dota_toxic"):
                 await self._dota_toxic(query, context, user_id, account_id)
 
-            elif data == "dota_shame_toggle":
+            elif data.startswith("dota_shame_toggle"):
                 await self._dota_shame_toggle(query, context, user_id, chat_id)
 
-            elif data == "dota_unlink":
+            elif data.startswith("dota_unlink"):
                 await self.steam_repo.unlink(user_id)
-                await query.edit_message_text("✅ Steam отвязан!", reply_markup=Keyboards.back_button(as_markup=True))
+                await query.edit_message_text("✅ Steam отвязан!", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
 
         except BadRequest as e:
             if "message is not modified" not in str(e).lower():
@@ -467,13 +502,13 @@ class MenuHandlers:
                 f"🎯 {live.game_mode}\n"
                 f"{mmr_text}",
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
         else:
             await query.edit_message_text(
                 f"😴 *{name}* сейчас не в игре\n\n" f"_Или матч не отслеживается OpenDota_",
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
 
     async def _dota_last_match(self, query, context, user_id: int, account_id: int) -> None:
@@ -486,7 +521,7 @@ class MenuHandlers:
 
         if not match:
             await query.edit_message_text(
-                "❌ Не удалось получить данные матча", reply_markup=Keyboards.back_button(as_markup=True)
+                "❌ Не удалось получить данные матча", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
             )
             return
 
@@ -521,15 +556,15 @@ class MenuHandlers:
             f"\n🔗 [Подробнее](https://www.opendota.com/matches/{match['match_id']})"
         )
 
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(as_markup=True))
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
 
-    async def _dota_profile(self, query, context, account_id: int) -> None:
+    async def _dota_profile(self, query, context, account_id: int, user_id: int) -> None:
         """Показывает профиль игрока."""
         profile = await self.opendota.get_profile(account_id)
 
         if not profile:
             await query.edit_message_text(
-                "❌ Не удалось загрузить профиль", reply_markup=Keyboards.back_button(as_markup=True)
+                "❌ Не удалось загрузить профиль", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
             )
             return
 
@@ -542,7 +577,7 @@ class MenuHandlers:
             f"🔗 [OpenDota](https://www.opendota.com/players/{account_id}) | "
             f"[Dotabuff](https://www.dotabuff.com/players/{account_id})",
             parse_mode="Markdown",
-            reply_markup=Keyboards.back_button(as_markup=True),
+            reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
         )
 
     async def _dota_toxic(self, query, context, user_id: int, account_id: int) -> None:
@@ -557,7 +592,7 @@ class MenuHandlers:
             await query.edit_message_text(
                 f"😇 *{name}* — святой человек!\n\n" f"_Либо не пишет в чат, либо данных нет_",
                 parse_mode="Markdown",
-                reply_markup=Keyboards.back_button(as_markup=True),
+                reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True),
             )
             return
 
@@ -610,7 +645,7 @@ class MenuHandlers:
         lines.append(f"\n📊 Всего слов: {total_words}")
 
         await query.edit_message_text(
-            "\n".join(lines), parse_mode="Markdown", reply_markup=Keyboards.back_button(as_markup=True)
+            "\n".join(lines), parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True)
         )
 
     async def _dota_shame_toggle(self, query, context, user_id: int, chat_id: int) -> None:
@@ -624,4 +659,4 @@ class MenuHandlers:
             await self.steam_repo.subscribe_shame(user_id, chat_id)
             text = "✅ *Подписка активирована!*\n\nТеперь после каждой катки бот определит самого бесполезного 😈"
 
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(as_markup=True))
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=Keyboards.back_button(f"menu_main_{user_id}", as_markup=True))
